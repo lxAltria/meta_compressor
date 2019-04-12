@@ -8,7 +8,6 @@
 #include <cmath>
 #include <cstddef>
 #include "sz_huffman.hpp"
-
 using namespace std;
 
 struct DSize_3d{
@@ -55,5 +54,10 @@ struct meanInfo{
 #define RegErrThreshold 0.1
 #define RegCoeffRadius 32768
 #define RegCoeffCapacity 65536
+
+// prediction options
+#define BLOCK_INDEPENDANT 0
+#define BLOCK_DEPENDANT 1
+#define BLOCK_SAMPLE 2
 #endif
 

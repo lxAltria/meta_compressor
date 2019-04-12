@@ -91,18 +91,111 @@ prediction_and_decompression_3d_with_border_prediction(const DSize_3d& size, con
 	free(pred_buffer);
 }
 
+template<typename T>
+void
+prediction_and_decompression_3d_samples(const T * data, const DSize_3d& size, const meanInfo<T>& mean_info, double precision,
+	int intv_radius, const float * reg_params, const unsigned char * indicator, 
+	const int * type, const T * unpredictable_data_pos, T * dec_data){
+	const int * type_pos = type;
+	const unsigned char * indicator_pos = indicator;
+	const float * reg_params_pos = reg_params;
+	// T * pred_buffer = (T *) malloc((size.block_size+1)*(size.block_size+1)*(size.block_size+1)*sizeof(T));
+	// memset(pred_buffer, 0, (size.block_size+1)*(size.block_size+1)*(size.block_size+1)*sizeof(T));
+	// size_t buffer_dim0_offset = size.block_size * size.block_size;
+	// size_t buffer_dim1_offset = size.block_size;
+	size_t buffer_dim0_offset = size.d2*size.d3;
+	size_t buffer_dim1_offset = size.d3;
+	// suppose to have block_num - 1 to exclude boundary blocks
+	// but sample gurantees that the size is mutiplt of block size
+	T * x_data_pos = dec_data;
+	for(size_t i=0; i<size.num_x; i++){
+		T * y_data_pos = x_data_pos;
+		for(size_t j=0; j<size.num_y; j++){
+			T * z_data_pos = y_data_pos;
+			for(size_t k=0; k<size.num_z; k++){
+				// because we compressed 7x7x7 block inside 8x8x8 to get rid of boundary points
+				int size_x, size_y, size_z;
+				size_x = size_y = size_z = size.block_size;
+				// fill uncompressed data point
+				{
+					T * buffer_pos = NULL;
+					const T * block_pos = NULL;
+					// for(int ii=0; ii<size_x; ii++){
+					// 	for(int jj=0; jj<size_y; jj++){
+					// 		buffer_pos = z_data_pos + ii*buffer_dim0_offset + jj*buffer_dim1_offset;
+					// 		block_pos = data + (buffer_pos - dec_data);
+					// 		if(buffer_pos + size_z - dec_data > 512*512*512){
+					// 			printf("exceed\n");
+					// 			printf("%ld %ld %ld, %d %d: %ld %ld\n", i, j, k, ii, jj, z_data_pos - dec_data, buffer_pos - dec_data);
+					// 			exit(0);
+					// 		}
+					// 		memcpy(buffer_pos, block_pos, size_z*sizeof(T));
+					// 	}
+					// }
+
+					// i=0
+					for(int j=0; j<size_y; j++){
+						buffer_pos = z_data_pos + j*size.dim1_offset;
+						block_pos = data + (buffer_pos - dec_data);
+						memcpy(buffer_pos, block_pos, size_z*sizeof(T));
+					}
+					// j=0
+					for(int i=1; i<size_x; i++){
+						buffer_pos = z_data_pos + i*size.dim0_offset;
+						block_pos = data + (buffer_pos - dec_data);
+						memcpy(buffer_pos, block_pos, size_z*sizeof(T));
+					}
+					// k=0
+					for(int i=1; i<size_x; i++){
+						buffer_pos = z_data_pos + i*size.dim0_offset;
+						block_pos = data + (buffer_pos - dec_data);
+						for(int j=1; j<size_y; j++){
+							// add first to skip 0
+							buffer_pos += size.dim1_offset;
+							block_pos += size.dim1_offset;
+							*buffer_pos = *block_pos;
+						}
+					}
+				}
+				// shift start point
+				T * cur_data_pos = z_data_pos + size.dim0_offset + size.dim1_offset + 1;
+				if(*indicator_pos){
+					// regression
+					// reduce block size
+					// because we want to evaluate the 7x7x7 block inside 8x8x8 to get rid of boundary points
+					block_pred_and_decompress_regression_3d(reg_params_pos, precision, intv_radius, 
+						size_x - 1, size_y - 1, size_z - 1, size.dim0_offset, size.dim1_offset, type_pos, unpredictable_data_pos, cur_data_pos);
+					reg_params_pos += RegCoeffNum3d;
+				}
+				else{
+					// Lorenzo
+					// reduce block size
+					// because we want to evaluate the 7x7x7 block inside 8x8x8 to get rid of boundary points
+					block_pred_and_decompress_lorenzo_3d(mean_info, z_data_pos, precision, intv_radius, 
+						size_x - 1, size_y - 1, size_z - 1, size.dim0_offset, size.dim1_offset, size.dim0_offset, size.dim1_offset, type_pos, unpredictable_data_pos, cur_data_pos);
+				}
+				indicator_pos ++;
+				z_data_pos += size_z;
+			}
+			y_data_pos += size.block_size*size.dim1_offset;
+		}
+		x_data_pos += size.block_size*size.dim0_offset;
+	}
+	// free(pred_buffer);
+}
+
 // perform decompression
 template<typename T>
 T * 
-sz_decompress_3d(const unsigned char * compressed, size_t r1, size_t r2, size_t r3){
+sz_decompress_3d(const unsigned char * compressed, size_t r1, size_t r2, size_t r3, T * data){
 	const unsigned char * compressed_pos = compressed;
 	int block_size = 0;
 	read_variable_from_src<int>(compressed_pos, block_size);
 	DSize_3d size(r1, r2, r3, block_size);
 	double precision = 0;
 	read_variable_from_src(compressed_pos, precision);
-	char block_independant = 0;
-	read_variable_from_src(compressed_pos, block_independant);
+	char pred_option = 0;
+	read_variable_from_src(compressed_pos, pred_option);
 	int intv_radius = 0;
 	read_variable_from_src(compressed_pos, intv_radius);
 	meanInfo<T> mean_info;
@@ -117,10 +210,25 @@ sz_decompress_3d(const unsigned char * compressed, size_t r1, size_t r2, size_t 
 	float * reg_params = NULL;
 	if(reg_count) reg_params = decode_regression_coefficients(compressed_pos, reg_count, size.block_size, precision);
 	const float * reg_params_pos = reg_count? (const float *) (reg_params + RegCoeffNum3d) : NULL; 
-	int * type = Huffman_decode_tree_and_data(4*intv_radius, size.num_elements, compressed_pos);
+	int * type = NULL;
+	if(pred_option == BLOCK_SAMPLE) type = Huffman_decode_tree_and_data(4*intv_radius, size.num_blocks * (size.block_size - 1) * (size.block_size - 1) * (size.block_size - 1), compressed_pos);
+	else type = Huffman_decode_tree_and_data(4*intv_radius, size.num_elements, compressed_pos);
 	T * dec_data = (T *) malloc(size.num_elements*sizeof(T));
-	block_independant ? prediction_and_decompression_3d(size, mean_info, precision, intv_radius, reg_params_pos, indicator, type, unpredictable_data, dec_data)
-		: prediction_and_decompression_3d_with_border_prediction(size, mean_info, precision, intv_radius, reg_params_pos, indicator, type, unpredictable_data, dec_data);
+	memset(dec_data, 0, size.num_elements*sizeof(T));
+	switch(pred_option){
+		case BLOCK_INDEPENDANT:
+			prediction_and_decompression_3d(size, mean_info, precision, intv_radius, reg_params_pos, indicator, type, unpredictable_data, dec_data);
+			break;
+		case BLOCK_DEPENDANT:
+			prediction_and_decompression_3d_with_border_prediction(size, mean_info, precision, intv_radius, reg_params_pos, indicator, type, unpredictable_data, dec_data);
+			break;
+		case BLOCK_SAMPLE:
+			prediction_and_decompression_3d_samples(data, size, mean_info, precision, intv_radius, reg_params_pos, indicator, type, unpredictable_data, dec_data);
+			break;
+		default:
+			prediction_and_decompression_3d(size, mean_info, precision, intv_radius, reg_params_pos, indicator, type, unpredictable_data, dec_data);
+			break;			
+	}
 	free(indicator);
 	free(reg_params);
 	free(type);
@@ -129,7 +237,7 @@ sz_decompress_3d(const unsigned char * compressed, size_t r1, size_t r2, size_t 
 
 template
 float * 
-sz_decompress_3d<float>(const unsigned char * compressed, size_t r1, size_t r2, size_t r3);
+sz_decompress_3d<float>(const unsigned char * compressed, size_t r1, size_t r2, size_t r3, float * data);
 
 
 

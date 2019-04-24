@@ -1,8 +1,10 @@
-add_library (sz_cpp SHARED 
+add_library (sz_cpp STATIC 
 	sz_compression_utils.cpp
 	sz_compress_3d.cpp
 	sz_decompression_utils.cpp
 	sz_decompress_3d.cpp
+	sz_compress_block_processing_knl_c.c
+	sz_decompress_block_processing_knl_c.c
 	sz_huffman.cpp
 	sz_lossless.cpp)
 target_include_directories(sz_cpp PRIVATE ${ZSTD_INCLUDES})

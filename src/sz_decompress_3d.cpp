@@ -1,6 +1,7 @@
 #include "sz_decompress_3d.hpp"
 #include "sz_decompress_block_processing.hpp"
 #include "sz_decompress_block_processing_knl.hpp"
+#include "sz_decompress_block_processing_knl_c.h"
 
 // use block-independant lorenzo pred & quant
 template<typename T>
@@ -159,15 +160,16 @@ prediction_and_decompression_3d_with_border_prediction_and_knl_optimization(cons
 				int size_z = ((k+1)*size.block_size < size.d3) ? size.block_size : size.d3 - k*size.block_size;
 				if(*indicator_pos){
 					// regression
-					block_pred_and_decompress_regression_3d_with_buffer_knl(reg_params_pos, pred_buffer_pos, precision, intv_radius, 
+					block_pred_and_decompress_regression_3d_with_buffer_knl_c(reg_params_pos, pred_buffer_pos, precision, intv_radius, 
 						size_x, size_y, size_z, buffer_dim0_offset, buffer_dim1_offset, size.dim0_offset, size.dim1_offset, type_pos, unpred_count_buffer, unpred_data_buffer, offset, z_data_pos);
 					reg_params_pos += RegCoeffNum3d;
 				}
 				else{
 					// Lorenzo
-					block_pred_and_decompress_lorenzo_3d_knl_2d_pred(mean_info, pred_buffer_pos, precision, intv_radius, size_x, size_y, size_z, 
+					block_pred_and_decompress_lorenzo_3d_knl_2d_pred_c(mean_info.use_mean, mean_info.mean, pred_buffer_pos, precision, intv_radius, size_x, size_y, size_z, 
 							buffer_dim0_offset, buffer_dim1_offset, size.dim0_offset, size.dim1_offset, type_pos, unpred_count_buffer, unpred_data_buffer, offset, z_data_pos);
 				}
+				type_pos += size_x * size_y * size_z;
 				pred_buffer_pos += size.block_size;
 				indicator_pos ++;
 				z_data_pos += size_z;

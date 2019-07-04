@@ -11,6 +11,28 @@
 
 using namespace std;
 
+struct DSize_2d{
+	size_t d1;
+	size_t d2;
+	size_t num_elements;
+	int block_size;
+	int max_num_block_elements;
+	size_t num_x;
+	size_t num_y;
+	size_t num_blocks;
+	size_t dim0_offset;
+	DSize_2d(size_t r1, size_t r2, int bs){
+		d1 = r1, d2 = r2;
+		num_elements = r1 * r2;
+		block_size = bs;
+		max_num_block_elements = bs * bs;
+		num_x = (r1 - 1) / block_size + 1;
+		num_y = (r2 - 1) / block_size + 1;
+		num_blocks = num_x * num_y;
+		dim0_offset = r2;
+	}
+};
+
 struct DSize_3d{
 	size_t d1;
 	size_t d2;
@@ -51,9 +73,19 @@ struct meanInfo{
 #define MAX(a, b) a>b?a:b
 #define MIN(a, b) a<b?a:b
 
+#define RegCoeffNum2d 3
 #define RegCoeffNum3d 4
 #define RegErrThreshold 0.1
 #define RegCoeffRadius 32768
 #define RegCoeffCapacity 65536
+#define QuantIntvMeanCapacity 8192
+#define QuantIntvSampleDistance 100
+#define QuantIntvSampleCapacity 32768
+#define QuantIntvAccThreshold 0.999
+#define RegThresholdSize2d 8
+#define RegThresholdSize3d 4
+#define LorenzeNoise2d 0.81
+#define LorenzeNoise3d 1.22
+
 #endif
 

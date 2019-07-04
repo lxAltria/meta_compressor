@@ -3,13 +3,6 @@
 
 #include "sz_def.hpp"
 
-#define QuantIntvMeanCapacity 8192
-#define QuantIntvSampleDistance 100
-#define QuantIntvSampleCapacity 32768
-#define QuantIntvAccThreshold 0.999
-#define RegThresholdSize3d 4
-#define LorenzeNoise3d 1.22
-
 template <typename T>
 inline void
 write_variable_to_dst(unsigned char *& dst, const T& var){
@@ -59,6 +52,15 @@ quantize(float pred, T cur_data, double precision, int capacity, int intv_radius
 }
 
 inline void
+compress_regression_coefficient_2d(const double * precisions, float * reg_params_pos, int * reg_params_type_pos, float *& reg_unpredictable_data_pos){
+	float * prev_reg_params = reg_params_pos - RegCoeffNum2d;
+	for(int i=0; i<RegCoeffNum2d; i++){
+		*(reg_params_type_pos ++) = quantize(*prev_reg_params, *reg_params_pos, precisions[i], RegCoeffCapacity, RegCoeffRadius, reg_unpredictable_data_pos, reg_params_pos);
+		prev_reg_params ++, reg_params_pos ++; 
+	}
+}
+
+inline void
 compress_regression_coefficient_3d(const double * precisions, float * reg_params_pos, int * reg_params_type_pos, float *& reg_unpredictable_data_pos){
 	float * prev_reg_params = reg_params_pos - RegCoeffNum3d;
 	for(int i=0; i<RegCoeffNum3d; i++){
@@ -66,6 +68,9 @@ compress_regression_coefficient_3d(const double * precisions, float * reg_params
 		prev_reg_params ++, reg_params_pos ++; 
 	}
 }
+
+void
+encode_regression_coefficients_2d(const int * reg_params_type, const float * reg_unpredictable_data, size_t reg_count, size_t reg_unpredictable_count, unsigned char *& compressed_pos);
 
 void
 encode_regression_coefficients(const int * reg_params_type, const float * reg_unpredictable_data, size_t reg_count, size_t reg_unpredictable_count, unsigned char *& compressed_pos);

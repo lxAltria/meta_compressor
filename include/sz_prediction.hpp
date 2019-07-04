@@ -3,6 +3,18 @@
 
 template<typename T>
 inline T
+regression_predict_2d(const float * reg_params_pos, int x, int y){
+	return reg_params_pos[0] * x + reg_params_pos[1] * y + reg_params_pos[2];
+}
+
+template<typename T>
+inline T
+lorenzo_predict_2d(const T * data_pos, size_t dim0_offset){
+	return data_pos[-1] + data_pos[-dim0_offset] - data_pos[-dim0_offset - 1];
+}
+
+template<typename T>
+inline T
 regression_predict_3d(const float * reg_params_pos, int x, int y, int z){
 	return reg_params_pos[0] * x + reg_params_pos[1] * y + reg_params_pos[2] * z + reg_params_pos[3];
 }

@@ -78,9 +78,9 @@ prediction_and_quantization_2d_with_border_prediction(const T * data, const DSiz
 // perform compression
 template<typename T>
 unsigned char *
-sz_compress_2d(const T * data, size_t r1, size_t r2, double precision, size_t& compressed_size, int BSIZE2d, bool block_independant){
+sz_compress_2d(const T * data, size_t r1, size_t r2, double precision, size_t& compressed_size, int BSIZE, bool block_independant){
 	// block_independant = false;
-	DSize_2d size(r1, r2, BSIZE2d);
+	DSize_2d size(r1, r2, BSIZE);
 	int capacity = 0; // num of quant intervals
 	capacity = 32768;
 	meanInfo<T> mean_info;// = optimize_quant_invl_2d(data, r1, r2, precision, capacity);
@@ -121,7 +121,7 @@ sz_compress_2d(const T * data, size_t r1, size_t r2, double precision, size_t& c
 
 template 
 unsigned char * 
-sz_compress_2d<float>(const float * data, size_t r1, size_t r2, double precision, size_t& compressed_size, int BSIZE2d, bool block_independant);
+sz_compress_2d<float>(const float * data, size_t r1, size_t r2, double precision, size_t& compressed_size, int BSIZE, bool block_independant);
 
 
 // return regression count
@@ -275,9 +275,9 @@ prediction_and_quantization_3d_with_border_prediction(const T * data, const DSiz
 // perform compression
 template<typename T>
 unsigned char *
-sz_compress_3d(const T * data, size_t r1, size_t r2, size_t r3, double precision, size_t& compressed_size, int BSIZE3d, bool block_independant){
+sz_compress_3d(const T * data, size_t r1, size_t r2, size_t r3, double precision, size_t& compressed_size, int BSIZE, bool block_independant){
 	// block_independant = false;
-	DSize_3d size(r1, r2, r3, BSIZE3d);
+	DSize_3d size(r1, r2, r3, BSIZE);
 	int capacity = 0; // num of quant intervals
 	meanInfo<T> mean_info = optimize_quant_invl_3d(data, r1, r2, r3, precision, capacity);
 	int intv_radius = (capacity >> 1);
@@ -318,7 +318,7 @@ sz_compress_3d(const T * data, size_t r1, size_t r2, size_t r3, double precision
 
 template 
 unsigned char * 
-sz_compress_3d<float>(const float * data, size_t r1, size_t r2, size_t r3, double precision, size_t& compressed_size, int BSIZE3d, bool block_independant);
+sz_compress_3d<float>(const float * data, size_t r1, size_t r2, size_t r3, double precision, size_t& compressed_size, int BSIZE, bool block_independant);
 
 
 

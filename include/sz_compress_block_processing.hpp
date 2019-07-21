@@ -46,6 +46,37 @@ block_pred_and_quant_regression_2d_with_buffer(const T * data_pos, const float *
 
 template<typename T>
 inline void
+block_pred_and_quant_regression_2d_with_buffer_with_eb(const T * data_pos, const float * reg_params_pos, T * buffer, const double * precision_pos, int capacity, 
+	int intv_radius, int size_x, int size_y, size_t buffer_dim0_offset,
+	size_t dim0_offset, int *& type_pos, T *& unpredictable_data_pos){
+	const T * cur_data_pos = data_pos;
+	T * buffer_pos = buffer + buffer_dim0_offset + 1;
+	for(int i=0; i<size_x; i++){
+		T * cur_buffer_pos = buffer_pos;
+		for(int j=0; j<size_y; j++){
+			double precision = *precision_pos;
+			if(precision == 0){
+				T cur_data = *cur_data_pos;
+				*(type_pos++) = 0;
+				*(unpredictable_data_pos++) = cur_data;
+				*cur_buffer_pos = cur_data;
+			}
+			else{
+				float pred = regression_predict_2d<T>(reg_params_pos, i, j);
+				*(type_pos++) = quantize(pred, *cur_data_pos, precision, capacity, intv_radius, unpredictable_data_pos, cur_buffer_pos);
+			}
+			cur_buffer_pos ++;
+			cur_data_pos ++;
+			precision_pos ++;
+		}
+		buffer_pos += buffer_dim0_offset;
+		cur_data_pos += dim0_offset - size_y;
+		precision_pos += dim0_offset - size_y;
+	}
+}
+
+template<typename T>
+inline void
 block_pred_and_quant_lorenzo_2d(const meanInfo<T>& mean_info, const T * data_pos, T * buffer, double precision, int capacity, int intv_radius, 
 	int size_x, int size_y, size_t buffer_dim0_offset,
 	size_t dim0_offset, int *& type_pos, T *& unpredictable_data_pos){
@@ -69,6 +100,44 @@ block_pred_and_quant_lorenzo_2d(const meanInfo<T>& mean_info, const T * data_pos
 		cur_data_pos += dim0_offset - size_y;
 	}
 }
+
+template<typename T>
+inline void
+block_pred_and_quant_lorenzo_2d_with_eb(const meanInfo<T>& mean_info, const T * data_pos, T * buffer, const double * precision_pos, int capacity, int intv_radius, 
+	int size_x, int size_y, size_t buffer_dim0_offset,
+	size_t dim0_offset, int *& type_pos, T *& unpredictable_data_pos){
+	const T * cur_data_pos = data_pos;
+	T * buffer_pos = buffer + buffer_dim0_offset + 1;
+	for(int i=0; i<size_x; i++){
+		T * cur_buffer_pos = buffer_pos;
+		for(int j=0; j<size_y; j++){
+			double precision = *precision_pos;
+			if(precision == 0){
+				T cur_data = *cur_data_pos;
+				*(type_pos++) = 0;
+				*(unpredictable_data_pos++) = cur_data;
+				*cur_buffer_pos = cur_data;
+			}
+			else{
+				if(mean_info.use_mean && (fabs(*cur_data_pos - mean_info.mean) < precision)){
+					*(type_pos++) = 1;
+					*cur_buffer_pos = mean_info.mean;
+				}
+				else{
+					float pred = lorenzo_predict_2d(cur_buffer_pos, buffer_dim0_offset);
+					*(type_pos++) = quantize(pred, *cur_data_pos, precision, capacity, intv_radius, unpredictable_data_pos, cur_buffer_pos);
+				}
+			}
+			cur_data_pos ++;
+			cur_buffer_pos ++;
+			precision_pos ++;
+		}
+		buffer_pos += buffer_dim0_offset;
+		cur_data_pos += dim0_offset - size_y;
+		precision_pos += dim0_offset - size_y;
+	}
+}
+
 
 template<typename T>
 inline void

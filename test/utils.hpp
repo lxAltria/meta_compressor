@@ -42,7 +42,7 @@ void readfile_to_buffer(char * file, size_t& num, Type * data){
 }
 
 template<typename Type>
-void writefile(char * file, Type * data, size_t num_elements){
+void writefile(const char * file, Type * data, size_t num_elements){
 	std::ofstream fout(file, std::ios::binary);
 	fout.write(reinterpret_cast<const char*>(&data[0]), num_elements*sizeof(Type));
 	fout.close();

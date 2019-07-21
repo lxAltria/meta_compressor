@@ -1,8 +1,10 @@
 add_library (sz_cpp SHARED 
 	sz_compression_utils.cpp
+	sz_compress_cp_preserve_2d.cpp
 	sz_compress_3d.cpp
 	sz_compress_pwr.cpp
 	sz_decompression_utils.cpp
+	sz_decompress_cp_preserve_2d.cpp
 	sz_decompress_3d.cpp
 	sz_decompress_pwr.cpp
 	sz_huffman.cpp

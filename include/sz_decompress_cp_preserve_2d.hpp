@@ -10,4 +10,8 @@ template<typename T>
 void
 sz_decompress_cp_preserve_2d_offline(const unsigned char * compressed, size_t r1, size_t r2, T *& U, T *& V);
 
+template<typename T>
+void
+sz_decompress_cp_preserve_2d_offline_log(const unsigned char * compressed, size_t r1, size_t r2, T *& U, T *& V);
+
 #endif

@@ -175,23 +175,23 @@ inline void accumulate(const T value, double& positive, double& negative){
 // 	}
 // }
 
-// template<typename T>
-// T *
-// log_transform(const T * data, unsigned char * sign, size_t n){
-// 	T * log_data = (T *) malloc(n*sizeof(T));
-// 	for(int i=0; i<n; i++){
-// 		sign[i] = 0;
-// 		if(data[i] != 0){
-// 			sign[i] = (data[i] > 0);
-// 			log_data[i] = (data[i] > 0) ? log2(data[i]) : log2(-data[i]); 
-// 		}
-// 		else{
-// 			sign[i] = 0;
-// 			log_data[i] = 0; //TODO???
-// 		}
-// 	}
-// 	return log_data;
-// }
+template<typename T>
+T *
+log_transform(const T * data, unsigned char * sign, size_t n){
+	T * log_data = (T *) malloc(n*sizeof(T));
+	for(int i=0; i<n; i++){
+		sign[i] = 0;
+		if(data[i] != 0){
+			sign[i] = (data[i] > 0);
+			log_data[i] = (data[i] > 0) ? log2(data[i]) : log2(-data[i]); 
+		}
+		else{
+			sign[i] = 0;
+			log_data[i] = 0; //TODO???
+		}
+	}
+	return log_data;
+}
 
 // template<typename T>
 // unsigned char *
@@ -800,7 +800,7 @@ sz_compress_cp_preserve_2d_offline(const T * U, const T * V, size_t r1, size_t r
 	printf("eb_size = %ld, u_size = %ld, v_size = %ld\n", compressed_eb_size, compressed_u_size, compressed_v_size);
 	free(eb_u);
 	free(eb_v);
-	compressed_size = sizeof(size_t) + compressed_eb_size + sizeof(size_t) + compressed_u_size + sizeof(size_t) + compressed_v_size;
+	compressed_size = sizeof(int) + sizeof(size_t) + compressed_eb_size + sizeof(size_t) + compressed_u_size + sizeof(size_t) + compressed_v_size;
 	unsigned char * compressed = (unsigned char *) malloc(compressed_size);
 	unsigned char * compressed_pos = compressed;
 	write_variable_to_dst(compressed_pos, base);
@@ -825,3 +825,103 @@ template
 unsigned char *
 sz_compress_cp_preserve_2d_offline(const double * U, const double * V, size_t r1, size_t r2, size_t& compressed_size, bool transpose, double max_pwr_eb);
 
+// compression with pre-computed error bounds in logarithmic domain
+template<typename T>
+unsigned char *
+sz_compress_cp_preserve_2d_offline_log(const T * U, const T * V, size_t r1, size_t r2, size_t& compressed_size, bool transpose, double max_pwr_eb){
+
+	size_t num_elements = r1 * r2;
+	double * eb = (double *) malloc(num_elements * sizeof(double));
+	for(int i=0; i<num_elements; i++) eb[i] = 1;
+	const T * U_pos = U;
+	const T * V_pos = V;
+	double * eb_pos = eb;
+	// coordinates for triangle_coordinates
+	const T X_upper[3][2] = {{0, 0}, {1, 0}, {1, 1}};
+	const T X_lower[3][2] = {{0, 0}, {0, 1}, {1, 1}};
+	const size_t offset_upper[3] = {0, r2, r2+1};
+	const size_t offset_lower[3] = {0, 1, r2+1};
+	printf("compute eb\n");
+	for(int i=0; i<r1-1; i++){
+		const T * U_row_pos = U_pos;
+		const T * V_row_pos = V_pos;
+		double * eb_row_pos = eb_pos;
+		for(int j=0; j<r2-1; j++){
+			for(int k=0; k<2; k++){
+				auto X = (k == 0) ? X_upper : X_lower;
+				auto offset = (k == 0) ? offset_upper : offset_lower;
+				double max_cur_eb = max_eb_to_keep_position_and_type(U_row_pos[offset[0]], U_row_pos[offset[1]], U_row_pos[offset[2]],
+					V_row_pos[offset[0]], V_row_pos[offset[1]], V_row_pos[offset[2]], X[0][0], X[1][0], X[2][0],
+					X[0][1], X[1][1], X[2][1]);
+				eb_row_pos[offset[0]] = MIN(eb_row_pos[offset[0]], max_cur_eb);
+				eb_row_pos[offset[1]] = MIN(eb_row_pos[offset[1]], max_cur_eb);
+				eb_row_pos[offset[2]] = MIN(eb_row_pos[offset[2]], max_cur_eb);
+			}
+			U_row_pos ++;
+			V_row_pos ++;
+			eb_row_pos ++;
+		}
+		U_pos += r2;
+		V_pos += r2;
+		eb_pos += r2;
+	}
+	printf("compute eb done\n");
+	size_t sign_map_size = (num_elements - 1)/8 + 1;
+	unsigned char * sign_map_compressed = (unsigned char *) malloc(2*sign_map_size);
+	unsigned char * sign_map_compressed_pos = sign_map_compressed;
+	unsigned char * sign_map = (unsigned char *) malloc(num_elements*sizeof(unsigned char));
+	// Note the convert function has address auto increment
+	T * log_U = log_transform(U, sign_map, num_elements);
+	convertIntArray2ByteArray_fast_1b_to_result_sz(sign_map, num_elements, sign_map_compressed_pos);
+	T * log_V = log_transform(V, sign_map, num_elements);
+	convertIntArray2ByteArray_fast_1b_to_result_sz(sign_map, num_elements, sign_map_compressed_pos);
+	free(sign_map);
+	// transfrom eb to log(1 + eb) and the quantize
+	int * eb_quant_index = (int *) malloc(num_elements*sizeof(int));
+	int * eb_quant_index_pos = eb_quant_index;
+	const int base = 2;
+	double log2_of_base = log2(base);
+	const double threshold = std::numeric_limits<float>::epsilon();
+	for(int i=0; i<num_elements; i++){
+		eb[i] = log2(1 + eb[i]);
+		*(eb_quant_index_pos ++) = eb_exponential_quantize(eb[i], base, log2_of_base);
+		if(eb[i] < threshold) eb[i] = 0;
+	}
+	printf("quantize eb done\n");
+	unsigned char * compressed_eb = (unsigned char *) malloc(num_elements*sizeof(int));
+	unsigned char * compressed_eb_pos = compressed_eb; 
+	Huffman_encode_tree_and_data(2*256, eb_quant_index, num_elements, compressed_eb_pos);
+	size_t compressed_eb_size = compressed_eb_pos - compressed_eb;
+	size_t compressed_u_size = 0;
+	size_t compressed_v_size = 0;
+	unsigned char * compressed_u = sz_compress_2d_with_eb(log_U, eb, r1, r2, compressed_u_size);
+	free(log_U);
+	unsigned char * compressed_v = sz_compress_2d_with_eb(log_V, eb, r1, r2, compressed_v_size);
+	free(log_V);
+	printf("eb_size = %ld, log_u_size = %ld, log_v_size = %ld\n", compressed_eb_size, compressed_u_size, compressed_v_size);
+	free(eb);
+	compressed_size = sizeof(int) + 2*sign_map_size + sizeof(size_t) + compressed_eb_size + sizeof(size_t) + compressed_u_size + sizeof(size_t) + compressed_v_size;
+	unsigned char * compressed = (unsigned char *) malloc(compressed_size);
+	unsigned char * compressed_pos = compressed;
+	write_variable_to_dst(compressed_pos, base);
+	write_variable_to_dst(compressed_pos, compressed_eb_size);
+	write_variable_to_dst(compressed_pos, compressed_u_size);
+	write_variable_to_dst(compressed_pos, compressed_v_size);
+	write_array_to_dst(compressed_pos, compressed_eb, compressed_eb_size);
+	write_array_to_dst(compressed_pos, sign_map_compressed, 2*sign_map_size);
+	write_array_to_dst(compressed_pos, compressed_u, compressed_u_size);
+	write_array_to_dst(compressed_pos, compressed_v, compressed_v_size);
+	free(sign_map_compressed);
+	free(compressed_eb);
+	free(compressed_u);
+	free(compressed_v);
+	return compressed;
+}
+
+template
+unsigned char *
+sz_compress_cp_preserve_2d_offline_log(const float * U, const float * V, size_t r1, size_t r2, size_t& compressed_size, bool transpose, double max_pwr_eb);
+
+template
+unsigned char *
+sz_compress_cp_preserve_2d_offline_log(const double * U, const double * V, size_t r1, size_t r2, size_t& compressed_size, bool transpose, double max_pwr_eb);

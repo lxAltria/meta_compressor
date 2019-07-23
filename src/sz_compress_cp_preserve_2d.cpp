@@ -52,7 +52,7 @@ log_transform(const T * data, unsigned char * sign, size_t n){
 		}
 		else{
 			sign[i] = 0;
-			log_data[i] = 0; //TODO???
+			log_data[i] = -100; //TODO???
 		}
 	}
 	return log_data;
@@ -456,20 +456,48 @@ inline double max_eb_to_keep_sign_online_W(const T u1v2, const T u2v1){
 // W2 + W0 = u0v1 - u1v0 + u1v2 - u2v1
 // where u2, v2 is current data, u0, v0, u1, v1 is decompressed data
 
-// W0 + W2
-template<typename T>
-inline double max_eb_to_keep_sign_online_W1_W2(const T u0v1, const T u1v0, const T u2v0, const T u0v2){
-	T c = (u1v0 - u0v1) / (u2v0 - u0v2);
-	if(c < 0) return 1;
-	return (u2v0 - u0v2 > 0) ? 1 - c : c - 1;
-}
-
 // W1 + W2
 template<typename T>
+inline double max_eb_to_keep_sign_online_W1_W2(const T u0v1, const T u1v0, const T u2v0, const T u0v2){
+	if(u1v0 - u0v1 == 0){
+		double positive = 0;
+		double negative = 0;
+		accumulate(u2v0, positive, negative);
+		accumulate(-u0v2, positive, negative);
+		return max_eb_to_keep_sign(positive, negative, 1);		
+	}
+	if(u2v0 - u0v2 == 0) return 1;
+	if(u2v0 * u0v2 < 0){ 
+		T c = (u1v0 - u0v1) / (u2v0 - u0v2);
+		if(c < 0) return 1;
+		return (u2v0 - u0v2 > 0) ? 1 - c : c - 1;
+	}
+	else{
+		T c = (u2v0 - u0v2 + u0v1 - u1v0) / (u2v0 + u0v2);
+		return fabs(c);
+	}
+}
+
+// W0 + W2
+template<typename T>
 inline double max_eb_to_keep_sign_online_W0_W2(const T u0v1, const T u1v0, const T u1v2, const T u2v1){
-	T c = (u1v0 - u0v1) / (u1v2 - u2v1);
-	if(c < 0) return 1;
-	return (u1v2 - u2v1 > 0) ? 1 - c : c - 1;
+	if(u1v0 - u0v1 == 0){
+		double positive = 0;
+		double negative = 0;
+		accumulate(u1v2, positive, negative);
+		accumulate(-u2v1, positive, negative);
+		return max_eb_to_keep_sign(positive, negative, 1);		
+	}
+	if(u1v2 - u2v1 == 0) return 1;
+	if(u1v2 - u2v1 < 0){ 
+		T c = (u1v0 - u0v1) / (u1v2 - u2v1);
+		if(c < 0) return 1;
+		return (u1v2 - u2v1 > 0) ? 1 - c : c - 1;
+	}
+	else{
+		T c = (u1v2 - u2v1 + u0v1 - u1v0) / (u1v2 - u2v1);
+		return fabs(c);
+	}
 }
 
 // W0 + W1
@@ -544,7 +572,7 @@ derive_cp_eb_for_positions_online(const T u0, const T u1, const T u2, const T v0
 template<typename T>
 inline bool 
 inbound(T index, T lb, T ub){
-	return (index >= lb) && (index <= ub);
+	return (index >= lb) && (index < ub);
 }
 
 template<typename T>
@@ -683,3 +711,167 @@ template
 unsigned char *
 sz_compress_cp_preserve_2d_online(const double * U, const double * V, size_t r1, size_t r2, size_t& compressed_size, bool transpose, double max_pwr_eb);
 
+template<typename T>
+unsigned char *
+sz_compress_cp_preserve_2d_online_log(const T * U, const T * V, size_t r1, size_t r2, size_t& compressed_size, bool transpose, double max_pwr_eb){
+
+	size_t num_elements = r1 * r2;
+	size_t sign_map_size = (num_elements - 1)/8 + 1;
+	unsigned char * sign_map_compressed = (unsigned char *) malloc(2*sign_map_size);
+	unsigned char * sign_map_compressed_pos = sign_map_compressed;
+	unsigned char * sign_map = (unsigned char *) malloc(num_elements*sizeof(unsigned char));
+	// Note the convert function has address auto increment
+	T * log_U = log_transform(U, sign_map, num_elements);
+	convertIntArray2ByteArray_fast_1b_to_result_sz(sign_map, num_elements, sign_map_compressed_pos);
+	T * log_V = log_transform(V, sign_map, num_elements);
+	convertIntArray2ByteArray_fast_1b_to_result_sz(sign_map, num_elements, sign_map_compressed_pos);
+	free(sign_map);
+
+	T * decompressed_U = (T *) malloc(num_elements*sizeof(T));
+	memcpy(decompressed_U, U, num_elements*sizeof(T));
+	T * decompressed_V = (T *) malloc(num_elements*sizeof(T));
+	memcpy(decompressed_V, V, num_elements*sizeof(T));
+
+	int * eb_quant_index = (int *) malloc(num_elements*sizeof(int));
+	int * data_quant_index = (int *) malloc(2*num_elements*sizeof(int));
+	int * eb_quant_index_pos = eb_quant_index;
+	int * data_quant_index_pos = data_quant_index;
+	// next, row by row
+	const int base = 2;
+	const double log_of_base = log2(base);
+	const int capacity = 65536;
+	const int intv_radius = (capacity >> 1);
+	unpred_vec<T> unpred_data;
+	// offsets to get six adjacent triangle indices
+	// the 7-th rolls back to T0
+	/*
+			T3	T4
+		T2	X 	T5
+		T1	T0(T6)
+	*/
+	const int offsets[7] = {
+		-(int)r2, -(int)r2 - 1, -1, (int)r2, (int)r2+1, 1, -(int)r2
+	};
+	T * cur_log_U_pos = log_U;
+	T * cur_log_V_pos = log_V;
+	T * cur_U_pos = decompressed_U;
+	T * cur_V_pos = decompressed_V;
+	for(int i=0; i<r1; i++){
+		// printf("start %d row\n", i);
+		for(int j=0; j<r2; j++){
+			double required_eb = 1;
+			// derive eb given six adjacent triangles
+			for(int k=0; k<6; k++){
+				if(inbound(i*(int)r2 + j + offsets[k], 0, (int)num_elements) && inbound(i*(int)r2 + j + offsets[k+1], 0, (int)num_elements)){
+					required_eb = MIN(required_eb, derive_cp_eb_for_positions_online(cur_U_pos[offsets[k]], cur_U_pos[offsets[k+1]], cur_U_pos[0],
+						cur_V_pos[offsets[k]], cur_V_pos[offsets[k+1]], cur_V_pos[0], max_pwr_eb));
+				}
+			}
+			if((required_eb > 0) && (*cur_U_pos != 0) && (*cur_V_pos != 0)){
+				bool unpred_flag = false;
+				T decompressed[2];
+				double abs_eb = log(1 + required_eb);
+				*eb_quant_index_pos = eb_exponential_quantize(abs_eb, base, log_of_base);
+				// compress U and V
+				for(int k=0; k<2; k++){
+					T * cur_data_pos = (k == 0) ? cur_log_U_pos : cur_log_V_pos;
+					T cur_data = *cur_data_pos;
+					// get adjacent data and perform Lorenzo
+					/*
+						d2 X
+						d0 d1
+					*/
+					T d0 = (i && j) ? cur_data_pos[-1 - r2] : 0;
+					T d1 = (i) ? cur_data_pos[-r2] : 0;
+					T d2 = (j) ? cur_data_pos[-1] : 0;
+					T pred = d1 + d2 - d0;
+					double diff = cur_data - pred;
+					double quant_diff = fabs(diff) / abs_eb + 1;
+					if(quant_diff < capacity){
+						quant_diff = (diff > 0) ? quant_diff : -quant_diff;
+						int quant_index = (int)(quant_diff/2) + intv_radius;
+						data_quant_index_pos[k] = quant_index;
+						decompressed[k] = pred + 2 * (quant_index - intv_radius) * abs_eb; 
+						// check original data
+						if(fabs(decompressed[k] - cur_data) >= abs_eb){
+							unpred_flag = true;
+							break;
+						}
+					}
+					else{
+						unpred_flag = true;
+						break;
+					}
+				}
+				if(unpred_flag){
+					// recover quant index
+					*(eb_quant_index_pos ++) = 0;
+					*(data_quant_index_pos ++) = intv_radius;
+					*(data_quant_index_pos ++) = intv_radius;
+					unpred_data.push_back(*cur_U_pos);
+					unpred_data.push_back(*cur_V_pos);
+				}
+				else{
+					eb_quant_index_pos ++;
+					data_quant_index_pos += 2;
+					// assign decompressed data
+					*cur_log_U_pos = decompressed[0];
+					*cur_log_V_pos = decompressed[1];
+					*cur_U_pos = (*cur_U_pos > 0) ? exp2(*cur_log_U_pos) : -exp2(*cur_log_U_pos);
+					*cur_V_pos = (*cur_V_pos > 0) ? exp2(*cur_log_V_pos) : -exp2(*cur_log_V_pos);
+				}
+			}
+			else{
+				// record as unpredictable data
+				*(eb_quant_index_pos ++) = 0;
+				*(data_quant_index_pos ++) = intv_radius;
+				*(data_quant_index_pos ++) = intv_radius;
+				unpred_data.push_back(*cur_U_pos);
+				unpred_data.push_back(*cur_V_pos);
+			}
+			// test
+			if(fabs((*cur_U_pos - U[cur_U_pos - decompressed_U])/U[cur_U_pos - decompressed_U]) > required_eb){
+				printf("U\n");
+				printf("%d %d, %.4g, %d\n", i, j, required_eb, unpred_data.size());
+				printf("%d %d\n", cur_U_pos - decompressed_U, cur_log_U_pos - log_U);
+				printf("%.4g, %.4g, %.4g\n", *cur_U_pos, U[cur_U_pos - decompressed_U], (*cur_U_pos - U[cur_U_pos - decompressed_U])/U[cur_U_pos - decompressed_U]);
+				exit(0);
+			}
+			if(fabs((*cur_V_pos - V[cur_V_pos - decompressed_V])/V[cur_V_pos - decompressed_V]) > required_eb){
+				printf("V\n");
+				printf("%d %d, %.4g, %d\n", i, j, required_eb, unpred_data.size());
+				exit(0);
+			}
+			cur_log_U_pos ++, cur_log_V_pos ++;
+			cur_U_pos ++, cur_V_pos ++;
+		}
+	}
+	free(log_U);
+	free(log_V);
+	free(decompressed_U);
+	free(decompressed_V);
+	printf("offsets eb_q, data_q, unpred: %ld %ld %ld\n", eb_quant_index_pos - eb_quant_index, data_quant_index_pos - data_quant_index, unpred_data.size());
+	unsigned char * compressed = (unsigned char *) malloc(2*num_elements*sizeof(T));
+	unsigned char * compressed_pos = compressed;
+	write_variable_to_dst(compressed_pos, base);
+	write_variable_to_dst(compressed_pos, intv_radius);
+	write_array_to_dst(compressed_pos, sign_map_compressed, 2*sign_map_size);
+	free(sign_map_compressed);
+	size_t unpredictable_count = unpred_data.size();
+	write_variable_to_dst(compressed_pos, unpredictable_count);
+	write_array_to_dst(compressed_pos, (T *)&unpred_data[0], unpredictable_count);	
+	Huffman_encode_tree_and_data(2*256, eb_quant_index, num_elements, compressed_pos);
+	free(eb_quant_index);
+	Huffman_encode_tree_and_data(2*capacity, data_quant_index, 2*num_elements, compressed_pos);
+	free(data_quant_index);
+	compressed_size = compressed_pos - compressed;
+	return compressed;	
+}
+
+template
+unsigned char *
+sz_compress_cp_preserve_2d_online_log(const float * U, const float * V, size_t r1, size_t r2, size_t& compressed_size, bool transpose, double max_pwr_eb);
+
+template
+unsigned char *
+sz_compress_cp_preserve_2d_online_log(const double * U, const double * V, size_t r1, size_t r2, size_t& compressed_size, bool transpose, double max_pwr_eb);

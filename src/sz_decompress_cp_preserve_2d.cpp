@@ -213,10 +213,6 @@ sz_decompress_cp_preserve_2d_online_log(const unsigned char * compressed, size_t
 					*cur_data_pos = pred + 2 * (data_quant_index_pos[k] - intv_radius) * eb;
 				}
 			}
-			if(*U_pos > 10){
-				printf("%.4g\n", *U_pos);
-				exit(0);
-			}
 			U_pos ++;
 			V_pos ++;
 			data_quant_index_pos += 2;

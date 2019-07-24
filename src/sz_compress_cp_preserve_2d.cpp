@@ -147,7 +147,7 @@ inline void accumulate_in_square(const std::vector<T>& coeff, double& positive, 
 }
 
 // maximal error bound to keep the sign of B^2 - 4C
-// where  B = - (c0 * (u0 - u2) - c1 * (u1 - u2) + c2 * (v0 - v2) - c3 * (v1 - v2))
+// where  B = - (c0 * (u0 - u2) + c1 * (u1 - u2) + c2 * (v0 - v2) + c3 * (v1 - v2))
 //        C = det2x2 = u0v1 - u0v2 + u1v2 - u1v0 + u2v0 - u2v1
 template<typename T>
 inline double max_eb_to_keep_sign_eigen_delta_2(const T u0, const T u1, const T u2, const T v0, const T v1, const T v2,
@@ -456,6 +456,20 @@ inline double max_eb_to_keep_sign_online_W(const T u1v2, const T u2v1){
 // W2 + W0 = u0v1 - u1v0 + u1v2 - u2v1
 // where u2, v2 is current data, u0, v0, u1, v1 is decompressed data
 
+// maximal error bound to keep the sign of A*(1 + e_1) + B*(1 + e_2) + C
+template<typename T>
+inline double max_eb_to_keep_sign_online(const T A, const T B, const T C){
+	if(A * B > 0){
+		// same sign
+		T c = -C / (A + B);
+		return (c < 1) ? 1 - c : c - 1;
+	}
+	else{
+		T c = (A + B + C) / (A - B);
+		return fabs(c);
+	}
+}
+
 // W1 + W2
 template<typename T>
 inline double max_eb_to_keep_sign_online_W1_W2(const T u0v1, const T u1v0, const T u2v0, const T u0v2){
@@ -467,15 +481,16 @@ inline double max_eb_to_keep_sign_online_W1_W2(const T u0v1, const T u1v0, const
 		return max_eb_to_keep_sign(positive, negative, 1);		
 	}
 	if(u2v0 - u0v2 == 0) return 1;
-	if(u2v0 * u0v2 < 0){ 
-		T c = (u1v0 - u0v1) / (u2v0 - u0v2);
-		if(c < 0) return 1;
-		return (u2v0 - u0v2 > 0) ? 1 - c : c - 1;
-	}
-	else{
-		T c = (u2v0 - u0v2 + u0v1 - u1v0) / (u2v0 + u0v2);
-		return fabs(c);
-	}
+	return max_eb_to_keep_sign_online(u2v0, -u0v2, u0v1 - u1v0);
+	// if(u2v0 * u0v2 < 0){ 
+	// 	T c = (u1v0 - u0v1) / (u2v0 - u0v2);
+	// 	if(c < 0) return 1;
+	// 	return (u2v0 - u0v2 > 0) ? 1 - c : c - 1;
+	// }
+	// else{
+	// 	T c = (u2v0 - u0v2 + u0v1 - u1v0) / (u2v0 + u0v2);
+	// 	return fabs(c);
+	// }
 }
 
 // W0 + W2
@@ -489,15 +504,16 @@ inline double max_eb_to_keep_sign_online_W0_W2(const T u0v1, const T u1v0, const
 		return max_eb_to_keep_sign(positive, negative, 1);		
 	}
 	if(u1v2 - u2v1 == 0) return 1;
-	if(u1v2 - u2v1 < 0){ 
-		T c = (u1v0 - u0v1) / (u1v2 - u2v1);
-		if(c < 0) return 1;
-		return (u1v2 - u2v1 > 0) ? 1 - c : c - 1;
-	}
-	else{
-		T c = (u1v2 - u2v1 + u0v1 - u1v0) / (u1v2 - u2v1);
-		return fabs(c);
-	}
+	return max_eb_to_keep_sign_online(u1v2, -u2v1, u0v1 - u1v0);
+	// if(u1v2 - u2v1 < 0){ 
+	// 	T c = (u1v0 - u0v1) / (u1v2 - u2v1);
+	// 	if(c < 0) return 1;
+	// 	return (u1v2 - u2v1 > 0) ? 1 - c : c - 1;
+	// }
+	// else{
+	// 	T c = (u1v2 - u2v1 + u0v1 - u1v0) / (u1v2 + u2v1);
+	// 	return fabs(c);
+	// }
 }
 
 // W0 + W1
@@ -525,12 +541,68 @@ inline double max_eb_to_keep_position_online(const T u0v1, const T u1v0, const T
 	return eb;
 }
 
+// maximal error bound to keep the sign of B^2 - 4C
+// where  B = - (c0 * (u0 - u2) + c1 * (u1 - u2) + c2 * (v0 - v2) + c3 * (v1 - v2))
+//        C = det2x2 = u0v1 - u0v2 + u1v2 - u1v0 + u2v0 - u2v1
+template<typename T>
+inline double max_eb_to_keep_type_online(const T u0, const T u1, const T u2, const T v0, const T v1, const T v2, const T x0, const T x1, const T x2, const T y0, const T y1, const T y2){
+	double eb = 1;
+	T c[4] = {0};
+	{
+		get_adjugate_matrix_for_position(x0, x1, x2, y0, y1, y2, c);
+		// keep sign for B
+	    // coeff[0] = c[0]*u0;
+	    // coeff[1] = c[1]*u1;
+	    // coeff[2] = - (c[1] + c[0])*u2;
+	    // coeff[3] = c[2]*v0;
+	    // coeff[4] = c[3]*v1;
+	    // coeff[5] = - (c[3] + c[2])*v2;
+		eb = max_eb_to_keep_sign_online(-c[0]*u2 - c[1]*u2, -c[2]*v2 - c[3]*v2, c[0]*u0 + c[1]*u1 + c[2]*v0 + c[3]*v1);
+		// keep sign for C
+		eb = MIN(eb, max_eb_to_keep_sign_online(u2*v0 - u2*v1, u1*v2 - u0*v2, u0*v1 - u1*v0));
+	}
+	T m = c[1]*c[2] - c[0]*c[3];
+	T C = (-m) * (u0*v1 - u0*v2 + u1*v2 - u1*v0 + u2*v0 - u2*v1);
+	if(C <= 0) return eb;
+	{
+		// Note that meaning of B in the rhs changes here
+		// keep sign for B^2 - 4*C
+		// B = A*(1+e_1) + B*(1+e_2) + C
+		// C = D*(1+e_1) + E*(1+e_2) + F
+		double A = -c[0]*u2 - c[1]*u2, B = -c[2]*v2 - c[3]*v2, C = c[0]*u0 + c[1]*u1 + c[2]*v0 + c[3]*v1;
+		double D = (-m)*(u2*v0 - u2*v1), E = (-m)*(u1*v2 - u0*v2), F = (-m)*(u0*v1 - u1*v0);
+		// B = A*e_1 + B*e_2 + C'
+		// C = D*e_1 + E*e_2 + F'
+		C += A + B, F += D + E;
+		// B^2 - 4C = (A*e_1 + B*e_2)^2 + (2AC' - 4D)e_1 + (2BC' - 4E)e_2 + C'^2 - 4F'
+		double delta = C*C - 4*F;
+		if(delta == 0) return 0;
+		else if(delta > 0){
+			// (|2AC' - 4D| + |2BC' - 4E|)* -e + delta > 0
+			eb = MIN(eb, delta/(fabs(2*A*C - 4*D) + fabs(2*B*C - 4*E)));
+		}
+		else{
+			// (|A| + |B|)*e^2 + (|2AC' - 4D| + |2BC' - 4E|)*e + delta < 0
+			double a = fabs(A) + fabs(B);
+			double b = fabs(2*A*C - 4*D) + fabs(2*B*C - 4*E);
+			double c = delta;
+			if(b*b - 4*a*c < 0){
+				printf("impossible as a*c is always less than 0\n");
+				exit(0);
+			}
+			eb = MIN(eb, (-b + sqrt(b*b - 4*a*c))/(2*a));
+		}
+	}
+	return eb;
+}
+
 /*
 triangle mesh x0, x1, x2, derive cp-preserving eb for x2 given x0, x1
 */
 template<typename T>
 double 
-derive_cp_eb_for_positions_online(const T u0, const T u1, const T u2, const T v0, const T v1, const T v2, double max_pwr_eb){
+derive_cp_eb_for_positions_online(const T u0, const T u1, const T u2, const T v0, const T v1, const T v2,
+								const T x0, const T x1, const T x2, const T y0, const T y1, const T y2){
 	double u1v2 = u1*v2;
 	double u2v1 = u2*v1;
 	double u2v0 = u2*v0;
@@ -544,7 +616,9 @@ derive_cp_eb_for_positions_online(const T u0, const T u1, const T u2, const T v0
 		bool f2 = (det / (u1v2 - u2v1) >= 1); 
 		bool f3 = (det / (u0v1 - u1v0) >= 1); 
 		if(f1 && f2 && f3){
-			eb = max_eb_to_keep_position_online(u0v1, u1v0, u1v2, u2v1, u2v0, u0v2);
+			// eb = max_eb_to_keep_position_online(u0v1, u1v0, u1v2, u2v1, u2v0, u0v2);
+			eb = MIN(max_eb_to_keep_position_online(u0v1, u1v0, u1v2, u2v1, u2v0, u0v2), 
+				max_eb_to_keep_type_online(u0, u1, u2, v0, v1, v2, x0, x1, x2, y0, y1, y2));
 		}
 		else{
 			eb = 0;
@@ -563,7 +637,6 @@ derive_cp_eb_for_positions_online(const T u0, const T u1, const T u2, const T v0
 				double cur_eb = MIN(max_eb_to_keep_sign_online_W(u0v1, u1v0), max_eb_to_keep_sign_online_W0_W1(u1v2, u2v1, u2v0, u0v2));
 				eb = MAX(eb, cur_eb);				
 			}
-			eb = MIN(eb, max_pwr_eb);
 		}
 	}
 	return eb;
@@ -605,17 +678,33 @@ sz_compress_cp_preserve_2d_online(const T * U, const T * V, size_t r1, size_t r2
 	const int offsets[7] = {
 		-(int)r2, -(int)r2 - 1, -1, (int)r2, (int)r2+1, 1, -(int)r2
 	};
+	const T x[6][3] = {
+		{0, 0, 1},
+		{0, 1, 1},
+		{0, 1, 0},
+		{1, 1, 0},
+		{1, 0, 0},
+		{1, 0, 1}
+	};
+	const T y[6][3] = {
+		{1, 0, 1},
+		{0, 0, 1},
+		{0, 1, 1},
+		{0, 1, 0},
+		{1, 1, 0},
+		{1, 0, 0}
+	};
 	for(int i=0; i<r1; i++){
 		// printf("start %d row\n", i);
 		T * cur_U_pos = U_pos;
 		T * cur_V_pos = V_pos;
 		for(int j=0; j<r2; j++){
-			double required_eb = 1;
+			double required_eb = max_pwr_eb;
 			// derive eb given six adjacent triangles
 			for(int k=0; k<6; k++){
 				if(inbound(i*(int)r2 + j + offsets[k], 0, (int)num_elements) && inbound(i*(int)r2 + j + offsets[k+1], 0, (int)num_elements)){
 					required_eb = MIN(required_eb, derive_cp_eb_for_positions_online(cur_U_pos[offsets[k]], cur_U_pos[offsets[k+1]], cur_U_pos[0],
-						cur_V_pos[offsets[k]], cur_V_pos[offsets[k+1]], cur_V_pos[0], max_pwr_eb));
+						cur_V_pos[offsets[k]], cur_V_pos[offsets[k+1]], cur_V_pos[0], x[k][0], x[k][1], x[k][2], y[k][0], y[k][1], y[k][2]));
 				}
 			}
 			if(required_eb > 0){
@@ -745,12 +834,29 @@ sz_compress_cp_preserve_2d_online_log(const T * U, const T * V, size_t r1, size_
 	// offsets to get six adjacent triangle indices
 	// the 7-th rolls back to T0
 	/*
-			T3	T4
-		T2	X 	T5
-		T1	T0(T6)
+	|		T3	T4
+	y	T2	X 	T5
+	|	T1	T0(T6)
+		-	x 	-
 	*/
 	const int offsets[7] = {
 		-(int)r2, -(int)r2 - 1, -1, (int)r2, (int)r2+1, 1, -(int)r2
+	};
+	const T x[6][3] = {
+		{0, 0, 1},
+		{0, 1, 1},
+		{0, 1, 0},
+		{1, 1, 0},
+		{1, 0, 0},
+		{1, 0, 1}
+	};
+	const T y[6][3] = {
+		{1, 0, 1},
+		{0, 0, 1},
+		{0, 1, 1},
+		{0, 1, 0},
+		{1, 1, 0},
+		{1, 0, 0}
 	};
 	T * cur_log_U_pos = log_U;
 	T * cur_log_V_pos = log_V;
@@ -759,12 +865,12 @@ sz_compress_cp_preserve_2d_online_log(const T * U, const T * V, size_t r1, size_
 	for(int i=0; i<r1; i++){
 		// printf("start %d row\n", i);
 		for(int j=0; j<r2; j++){
-			double required_eb = 1;
+			double required_eb = max_pwr_eb;
 			// derive eb given six adjacent triangles
 			for(int k=0; k<6; k++){
 				if(inbound(i*(int)r2 + j + offsets[k], 0, (int)num_elements) && inbound(i*(int)r2 + j + offsets[k+1], 0, (int)num_elements)){
 					required_eb = MIN(required_eb, derive_cp_eb_for_positions_online(cur_U_pos[offsets[k]], cur_U_pos[offsets[k+1]], cur_U_pos[0],
-						cur_V_pos[offsets[k]], cur_V_pos[offsets[k+1]], cur_V_pos[0], max_pwr_eb));
+						cur_V_pos[offsets[k]], cur_V_pos[offsets[k+1]], cur_V_pos[0], x[k][0], x[k][1], x[k][2], y[k][0], y[k][1], y[k][2]));
 				}
 			}
 			if((required_eb > 0) && (*cur_U_pos != 0) && (*cur_V_pos != 0)){
@@ -828,19 +934,6 @@ sz_compress_cp_preserve_2d_online_log(const T * U, const T * V, size_t r1, size_
 				*(data_quant_index_pos ++) = intv_radius;
 				unpred_data.push_back(*cur_U_pos);
 				unpred_data.push_back(*cur_V_pos);
-			}
-			// test
-			if(fabs((*cur_U_pos - U[cur_U_pos - decompressed_U])/U[cur_U_pos - decompressed_U]) > required_eb){
-				printf("U\n");
-				printf("%d %d, %.4g, %d\n", i, j, required_eb, unpred_data.size());
-				printf("%d %d\n", cur_U_pos - decompressed_U, cur_log_U_pos - log_U);
-				printf("%.4g, %.4g, %.4g\n", *cur_U_pos, U[cur_U_pos - decompressed_U], (*cur_U_pos - U[cur_U_pos - decompressed_U])/U[cur_U_pos - decompressed_U]);
-				exit(0);
-			}
-			if(fabs((*cur_V_pos - V[cur_V_pos - decompressed_V])/V[cur_V_pos - decompressed_V]) > required_eb){
-				printf("V\n");
-				printf("%d %d, %.4g, %d\n", i, j, required_eb, unpred_data.size());
-				exit(0);
 			}
 			cur_log_U_pos ++, cur_log_V_pos ++;
 			cur_U_pos ++, cur_V_pos ++;

@@ -1,62 +1,8 @@
+#include "sz_cp_preserve_utils.hpp"
 #include "sz_compress_3d.hpp"
 #include "sz_compress_cp_preserve_2d.hpp"
 #include "sz_def.hpp"
 #include "sz_compression_utils.hpp"
-#include <vector>
-#include <limits>
-#include <cmath>
-#include <cstdio>
-#include <cstdlib>
-
-template<typename T>
-using unpred_vec = std::vector<T>;
-
-inline int eb_exponential_quantize(double& eb, const int base, const double log_of_base, const double threshold=std::numeric_limits<float>::epsilon()){
-	if(eb <= threshold){
-		eb = 0;
-		return 0;
-	}
-	int id = log2(eb / threshold)/log_of_base;
-	eb = pow(base, id) * threshold;
-	return id;
-}
-
-inline int eb_linear_quantize(double& eb, double threshold=1e-5){
-	int id = eb / threshold;
-	eb = id * threshold;
-	return id;
-}
-
-template<typename T>
-inline void swap_buffer_pointer(T*& b1, T*& b2){
-	T * tmp = b1;
-	b1 = b2;
-	b2 = tmp;
-}
-
-template<typename T>
-inline void accumulate(const T value, double& positive, double& negative){
-	if(value >= 0) positive += value;
-	else negative += - value;
-}
-
-template<typename T>
-T *
-log_transform(const T * data, unsigned char * sign, size_t n){
-	T * log_data = (T *) malloc(n*sizeof(T));
-	for(int i=0; i<n; i++){
-		sign[i] = 0;
-		if(data[i] != 0){
-			sign[i] = (data[i] > 0);
-			log_data[i] = (data[i] > 0) ? log2(data[i]) : log2(-data[i]); 
-		}
-		else{
-			sign[i] = 0;
-			log_data[i] = -100; //TODO???
-		}
-	}
-	return log_data;
-}
 
 // maximal error bound to keep the sign of postive*(1+e)^d - negative*(1-e)^d
 template<typename T>
@@ -115,10 +61,20 @@ template<typename T>
 inline double max_eb_to_keep_sign_4(const T u0, const T u1, const T u2, const T v0, const T v1, const T v2){
   double positive = 0;
   double negative = 0;
-  accumulate(u0*v1, positive, negative);
-  accumulate(-u1*v0, positive, negative);
-  accumulate(u1*v2, positive, negative);
-  accumulate(-u2*v1, positive, negative);
+  // accumulate(u0*v1, positive, negative);
+  // accumulate(-u1*v0, positive, negative);
+  // accumulate(u1*v2, positive, negative);
+  // accumulate(-u2*v1, positive, negative);
+  if(u0 * u2 > 0){
+	accumulate(u0*v1, positive, negative);
+	accumulate(-u2*v1, positive, negative);
+  }
+  else accumulate((u0-u2)*v1, positive, negative);
+  if(v0 * v2 > 0){
+	accumulate(-u1*v0, positive, negative);
+	accumulate((v2 - v0)*u1, positive, negative);  	
+  }
+  else accumulate((u0-u2)*v1, positive, negative);
   return max_eb_to_keep_sign(positive, negative, 2);
 }
 
@@ -236,7 +192,7 @@ inline double max_eb_to_keep_position_and_type(const T u0, const T u1, const T u
 				double eb_cur = MIN(max_eb_to_keep_sign_2(u0, u1, v0, v1), max_eb_to_keep_sign_4(u1, u2, u0, v1, v2, v0));
 				eb = MAX(eb, eb_cur);
 			}
-			eb = MIN(eb, DEFAULT_EB);
+			// eb = MIN(eb, DEFAULT_EB);
 		}
 	}
 	return eb;
@@ -470,6 +426,11 @@ inline double max_eb_to_keep_sign_online(const T A, const T B, const T C){
 	}
 }
 
+template<typename T>
+inline double max_eb_to_keep_sign_2d_online(const T A, const T B, const T C=0){
+	return fabs(A + B + C) / (fabs(A) + fabs(B) + fabs(C));
+}
+
 // W1 + W2
 template<typename T>
 inline double max_eb_to_keep_sign_online_W1_W2(const T u0v1, const T u1v0, const T u2v0, const T u0v2){
@@ -521,23 +482,41 @@ template<typename T>
 inline double max_eb_to_keep_sign_online_W0_W1(const T u1v2, const T u2v1, const T u2v0, const T u0v2){
 	double positive = 0;
 	double negative = 0;
-	accumulate(u1v2, positive, negative);
-	accumulate(-u2v1, positive, negative);
-	accumulate(u2v0, positive, negative);
-	accumulate(-u0v2, positive, negative);
+	// accumulate(u1v2, positive, negative);
+	// accumulate(-u2v1, positive, negative);
+	// accumulate(u2v0, positive, negative);
+	// accumulate(-u0v2, positive, negative);
+	if(u1v2 * u0v2 > 0){
+		accumulate(u1v2, positive, negative);
+		accumulate(-u0v2, positive, negative);
+	}
+	else accumulate(u1v2 - u0v2, positive, negative);
+	if(u2v1 * u2v0 > 0){
+		accumulate(-u2v1, positive, negative);
+		accumulate(u2v0, positive, negative);
+	}
+	else accumulate(u2v0 - u2v1, positive, negative);
 	if(positive * negative <= 0) return 1;
 	double c = positive / negative;
 	return MIN(1, fabs(c - 1) / (c + 1));
 }
 
+// W0 + W1 = u1v2 - u2v1 + u2v0 - u0v2
+// W1 + W2 = u2v0 - u0v2 + u0v1 - u1v0
+// W2 + W0 = u0v1 - u1v0 + u1v2 - u2v1
 template<typename T>
 inline double max_eb_to_keep_position_online(const T u0v1, const T u1v0, const T u1v2, const T u2v1, const T u2v0, const T u0v2){
 	// for W_i
-	double eb = MIN(max_eb_to_keep_sign_online_W(u1v2, u2v1), max_eb_to_keep_sign_online_W(u2v0, u0v2));
+	// double eb = MIN(max_eb_to_keep_sign_online_W(u1v2, u2v1), max_eb_to_keep_sign_online_W(u2v0, u0v2));
 	// for W1 + W2, W2 + W0
-	eb = MIN(eb, MIN(max_eb_to_keep_sign_online_W1_W2(u0v1, u1v0, u2v0, u0v2), max_eb_to_keep_sign_online_W0_W2(u0v1, u1v0, u1v2, u2v1)));
+	// eb = MIN(eb, MIN(max_eb_to_keep_sign_online_W1_W2(u0v1, u1v0, u2v0, u0v2), max_eb_to_keep_sign_online_W0_W2(u0v1, u1v0, u1v2, u2v1)));
 	// for W0 + W1
-	eb = MIN(eb, max_eb_to_keep_sign_online_W0_W1(u1v2, u2v1, u2v0, u0v2));
+	// eb = MIN(eb, max_eb_to_keep_sign_online_W0_W1(u1v2, u2v1, u2v0, u0v2));
+
+	double eb = MIN(max_eb_to_keep_sign_2d_online(-u2v1, u1v2), max_eb_to_keep_sign_2d_online(u2v0, -u0v2));
+	eb = MIN(eb, max_eb_to_keep_sign_2d_online(u2v0, -u0v2, u0v1 - u1v0));
+	eb = MIN(eb, max_eb_to_keep_sign_2d_online(-u2v1, u1v2, u0v1 - u1v0));
+	eb = MIN(eb, max_eb_to_keep_sign_2d_online(u2v0 - u2v1, u1v2 - u0v2));
 	return eb;
 }
 
@@ -580,10 +559,12 @@ inline double max_eb_to_keep_type_online(const T u0, const T u1, const T u2, con
 		else if(delta > 0){
 			// (|2AC' - 4D| + |2BC' - 4E|)* -e + delta > 0
 			eb = MIN(eb, delta/(fabs(2*A*C - 4*D) + fabs(2*B*C - 4*E)));
+			// check four edges
+
 		}
 		else{
-			// (|A| + |B|)*e^2 + (|2AC' - 4D| + |2BC' - 4E|)*e + delta < 0
-			double a = fabs(A) + fabs(B);
+			// (|A| + |B|)^2*e^2 + (|2AC' - 4D| + |2BC' - 4E|)*e + delta < 0
+			double a = (fabs(A) + fabs(B))*(fabs(A) + fabs(B));
 			double b = fabs(2*A*C - 4*D) + fabs(2*B*C - 4*E);
 			double c = delta;
 			if(b*b - 4*a*c < 0){
@@ -624,17 +605,18 @@ derive_cp_eb_for_positions_online(const T u0, const T u1, const T u2, const T v0
 			eb = 0;
 			if(!f1){
 				// W1(W0 + W2)
-				double cur_eb = MIN(max_eb_to_keep_sign_online_W(u2v0, u0v2), max_eb_to_keep_sign_online_W0_W2(u0v1, u1v0, u1v2, u2v1));
+				double cur_eb = MIN(max_eb_to_keep_sign_2d_online(u2v0, -u0v2), max_eb_to_keep_sign_2d_online(-u2v1, u1v2, u0v1 - u1v0));
 				eb = MAX(eb, cur_eb);
 			}
 			if(!f2){
 				// W0(W1 + W2)
-				double cur_eb = MIN(max_eb_to_keep_sign_online_W(u1v2, u2v1), max_eb_to_keep_sign_online_W1_W2(u0v1, u1v0, u2v0, u0v2));
+				double cur_eb = MIN(max_eb_to_keep_sign_2d_online(-u2v1, u1v2), max_eb_to_keep_sign_2d_online(u2v0, -u0v2, u0v1 - u1v0));
 				eb = MAX(eb, cur_eb);				
 			}
 			if(!f3){
 				// W2(W0 + W1)
-				double cur_eb = MIN(max_eb_to_keep_sign_online_W(u0v1, u1v0), max_eb_to_keep_sign_online_W0_W1(u1v2, u2v1, u2v0, u0v2));
+				// double cur_eb = MIN(max_eb_to_keep_sign_online_W(u0v1, u1v0), max_eb_to_keep_sign_online_W0_W1(u1v2, u2v1, u2v0, u0v2));
+				double cur_eb = max_eb_to_keep_sign_2d_online(u2v0 - u2v1, u1v2 - u0v2);
 				eb = MAX(eb, cur_eb);				
 			}
 		}
@@ -878,37 +860,40 @@ sz_compress_cp_preserve_2d_online_log(const T * U, const T * V, size_t r1, size_
 				T decompressed[2];
 				double abs_eb = log(1 + required_eb);
 				*eb_quant_index_pos = eb_exponential_quantize(abs_eb, base, log_of_base);
-				// compress U and V
-				for(int k=0; k<2; k++){
-					T * cur_data_pos = (k == 0) ? cur_log_U_pos : cur_log_V_pos;
-					T cur_data = *cur_data_pos;
-					// get adjacent data and perform Lorenzo
-					/*
-						d2 X
-						d0 d1
-					*/
-					T d0 = (i && j) ? cur_data_pos[-1 - r2] : 0;
-					T d1 = (i) ? cur_data_pos[-r2] : 0;
-					T d2 = (j) ? cur_data_pos[-1] : 0;
-					T pred = d1 + d2 - d0;
-					double diff = cur_data - pred;
-					double quant_diff = fabs(diff) / abs_eb + 1;
-					if(quant_diff < capacity){
-						quant_diff = (diff > 0) ? quant_diff : -quant_diff;
-						int quant_index = (int)(quant_diff/2) + intv_radius;
-						data_quant_index_pos[k] = quant_index;
-						decompressed[k] = pred + 2 * (quant_index - intv_radius) * abs_eb; 
-						// check original data
-						if(fabs(decompressed[k] - cur_data) >= abs_eb){
+				if(*eb_quant_index_pos > 0){
+					// compress U and V
+					for(int k=0; k<2; k++){
+						T * cur_data_pos = (k == 0) ? cur_log_U_pos : cur_log_V_pos;
+						T cur_data = *cur_data_pos;
+						// get adjacent data and perform Lorenzo
+						/*
+							d2 X
+							d0 d1
+						*/
+						T d0 = (i && j) ? cur_data_pos[-1 - r2] : 0;
+						T d1 = (i) ? cur_data_pos[-r2] : 0;
+						T d2 = (j) ? cur_data_pos[-1] : 0;
+						T pred = d1 + d2 - d0;
+						double diff = cur_data - pred;
+						double quant_diff = fabs(diff) / abs_eb + 1;
+						if(quant_diff < capacity){
+							quant_diff = (diff > 0) ? quant_diff : -quant_diff;
+							int quant_index = (int)(quant_diff/2) + intv_radius;
+							data_quant_index_pos[k] = quant_index;
+							decompressed[k] = pred + 2 * (quant_index - intv_radius) * abs_eb; 
+							// check original data
+							if(fabs(decompressed[k] - cur_data) >= abs_eb){
+								unpred_flag = true;
+								break;
+							}
+						}
+						else{
 							unpred_flag = true;
 							break;
 						}
 					}
-					else{
-						unpred_flag = true;
-						break;
-					}
 				}
+				else unpred_flag = true;
 				if(unpred_flag){
 					// recover quant index
 					*(eb_quant_index_pos ++) = 0;

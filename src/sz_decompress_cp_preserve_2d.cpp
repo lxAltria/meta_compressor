@@ -180,7 +180,7 @@ sz_decompress_cp_preserve_2d_online_log(const unsigned char * compressed, size_t
 	const T * unpred_data = (T *) compressed_pos;
 	const T * unpred_data_pos = unpred_data;
 	compressed_pos += unpred_data_count*sizeof(T);
-	int * eb_quant_index = Huffman_decode_tree_and_data(2*256, 2*num_elements, compressed_pos);
+	int * eb_quant_index = Huffman_decode_tree_and_data(2*256, num_elements, compressed_pos);
 	int * data_quant_index = Huffman_decode_tree_and_data(2*capacity, 2*num_elements, compressed_pos);
 	U = (T *) malloc(num_elements*sizeof(T));
 	V = (T *) malloc(num_elements*sizeof(T));

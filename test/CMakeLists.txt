@@ -13,3 +13,7 @@ target_include_directories (sz_compress_cp_preserve_2d_test PRIVATE ${ZSTD_INCLU
 target_include_directories (sz_compress_cp_preserve_2d_test PRIVATE ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries (sz_compress_cp_preserve_2d_test sz_cpp)
 
+add_executable (sz_compress_cp_preserve_3d_test sz_compress_cp_preserve_3d_test.cpp)
+target_include_directories (sz_compress_cp_preserve_3d_test PRIVATE ${ZSTD_INCLUDES})
+target_include_directories (sz_compress_cp_preserve_3d_test PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries (sz_compress_cp_preserve_3d_test sz_cpp)

@@ -4,6 +4,35 @@
 #include "sz_def.hpp"
 
 template <typename T>
+inline T
+out_of_range_data_encode(const T data, int residue_len, unsigned char *& sign_pos, int *& type_pos, unsigned char *& dst, int& pos){
+	*(sign_pos ++) = (data>0);
+	*(type_pos ++) = getExponent(data);
+	fp_int<T> fp;
+	fp.fval = data;
+	int discard_len = mantissa_len<T>() - residue_len;
+	fp.ival = (fp.ival >> discard_len) << discard_len;
+	T decompressed = fp.fval;
+	fp.ival &= 0x000FFFFFFFFFFFFF;
+	fp.ival >>= discard_len;
+	while(residue_len){
+		int byte_rest_len = 8 - pos;
+		if(residue_len >= byte_rest_len){
+			*dst = (*dst) | (0xFF & (fp.ival >> (residue_len - byte_rest_len)));
+			residue_len -= byte_rest_len;
+			dst ++;
+			pos = 0;
+		}
+		else{
+			*dst = (*dst) | (((0xFF >> (8 - residue_len)) & fp.ival) << (byte_rest_len - residue_len));
+			pos += residue_len;
+			break;
+		}
+	}
+	return decompressed;
+}
+
+template <typename T>
 inline void
 write_variable_to_dst(unsigned char *& dst, const T& var){
     memcpy(dst, &var, sizeof(T));

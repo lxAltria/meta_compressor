@@ -8,8 +8,82 @@
 #include <cmath>
 #include <cstddef>
 #include "sz_huffman.hpp"
+#include <vector>
 
 using namespace std;
+
+template <typename T>
+union fp_int;
+
+template<>
+union fp_int<float>{
+	unsigned int ival;
+	float fval;
+};
+
+template<>
+union fp_int<double>{
+	unsigned long ival;
+	double fval;
+};
+
+template <typename T>
+inline int 
+getExponent(T value);
+
+template<>
+inline int 
+getExponent<float>(float value){
+	fp_int<float> fp;
+	fp.fval = value;
+	unsigned int ival = fp.ival;
+	int exp = (ival & 0x7F800000) >> 23;
+	// exp -= 127;
+	return exp;	
+}
+
+template<>
+inline int 
+getExponent<double>(double value){
+	fp_int<double> fp;
+	fp.fval = value;
+	unsigned long ival = fp.ival;
+	int exp = (int)((ival & 0x7FF0000000000000) >> 52);
+	// exp -= 1023;
+	return exp;	
+}
+
+template <typename T>
+inline int 
+mantissa_len();
+
+template<>
+inline int 
+mantissa_len<float>(){
+	return 23;
+}
+
+template<>
+inline int 
+mantissa_len<double>(){
+	return 52;
+}
+
+template <typename T>
+inline int 
+exp_offset();
+
+template<>
+inline int 
+exp_offset<float>(){
+	return 127;
+}
+
+template<>
+inline int 
+exp_offset<double>(){
+	return 1023;
+}
 
 struct DSize_2d{
 	size_t d1;

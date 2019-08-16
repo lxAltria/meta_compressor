@@ -29,7 +29,7 @@ int main(int argc, char ** argv){
     size_t lossless_outsize = sz_lossless_compress(ZSTD_COMPRESSOR, 3, result, result_size, &result_after_lossless);
     err = clock_gettime(CLOCK_REALTIME, &end);
     cout << "Compression time: " << (double)(end.tv_sec - start.tv_sec) + (double)(end.tv_nsec - start.tv_nsec)/(double)1000000000 << "s" << endl;
-    cout << "Compressed size = " << lossless_outsize << ", ratio = " << (num_elements*sizeof(double)) * 1.0/lossless_outsize << endl;
+    cout << "Compressed size = " << lossless_outsize << ", ratio = " << (3*num_elements*sizeof(double)) * 1.0/lossless_outsize << endl;
     free(result);
     // exit(0);
     err = clock_gettime(CLOCK_REALTIME, &start);
@@ -50,7 +50,7 @@ int main(int argc, char ** argv){
     // transpose_2d(dec_V, r1, r2);
     writefile((string(argv[1]) + ".out").c_str(), dec_U, num_elements);
     writefile((string(argv[2]) + ".out").c_str(), dec_V, num_elements);
-    writefile((string(argv[2]) + ".out").c_str(), dec_W, num_elements);
+    writefile((string(argv[3]) + ".out").c_str(), dec_W, num_elements);
     free(result);
     free(U);
     free(V);

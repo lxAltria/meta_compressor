@@ -51,7 +51,8 @@ log_transform(const T * data, unsigned char * sign, size_t n){
 	return log_data;
 }
 
-inline bool pointer_in_range(ptrdiff_t pos, ptrdiff_t n){
+template<typename T>
+inline bool in_range(T pos, T n){
 	return (pos >= 0) && (pos < n);
 }
 

@@ -858,7 +858,7 @@ sz_compress_cp_preserve_2d_online_log(const T * U, const T * V, size_t r1, size_
 			if((required_eb > 0) && (*cur_U_pos != 0) && (*cur_V_pos != 0)){
 				bool unpred_flag = false;
 				T decompressed[2];
-				double abs_eb = log(1 + required_eb);
+				double abs_eb = log2(1 + required_eb);
 				*eb_quant_index_pos = eb_exponential_quantize(abs_eb, base, log_of_base);
 				if(*eb_quant_index_pos > 0){
 					// compress U and V

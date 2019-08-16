@@ -21,17 +21,14 @@ sz_decompress_cp_preserve_3d_online_log(const unsigned char * compressed, size_t
 	unsigned char * sign_map_u = convertByteArray2IntArray_fast_1b_sz(num_elements, compressed_pos, sign_map_size);	
 	unsigned char * sign_map_v = convertByteArray2IntArray_fast_1b_sz(num_elements, compressed_pos, sign_map_size);	
 	unsigned char * sign_map_w = convertByteArray2IntArray_fast_1b_sz(num_elements, compressed_pos, sign_map_size);	
-	printf("offset after sign: %ld\n", compressed_pos - compressed);
 	const int capacity = (intv_radius << 1);
 	size_t unpred_data_count = 0;
 	read_variable_from_src(compressed_pos, unpred_data_count);
-	const T * unpred_data = (T *) compressed_pos;
-	const T * unpred_data_pos = unpred_data;
+	const T * eb_zero_data = (T *) compressed_pos;
+	const T * eb_zero_data_pos = eb_zero_data;
 	compressed_pos += unpred_data_count*sizeof(T);
-	printf("offset after compressed: %ld\n", compressed_pos - compressed);
 	int * eb_quant_index = Huffman_decode_tree_and_data(2*256, num_elements, compressed_pos);
 	int * data_quant_index = Huffman_decode_tree_and_data(2*capacity, 3*num_elements, compressed_pos);
-	printf("offset after huffman: %ld\n", compressed_pos - compressed);
 	U = (T *) malloc(num_elements*sizeof(T));
 	V = (T *) malloc(num_elements*sizeof(T));
 	W = (T *) malloc(num_elements*sizeof(T));
@@ -43,6 +40,8 @@ sz_decompress_cp_preserve_3d_online_log(const unsigned char * compressed, size_t
 	int * eb_quant_index_pos = eb_quant_index;
 	int * data_quant_index_pos = data_quant_index;
 	const double threshold=std::numeric_limits<float>::epsilon();
+	double log_of_base = log2(base);
+	int eb_quant_index_max = (int) (log2(1.0 / threshold)/log_of_base) + 1;
 	std::unordered_set<int> unpred_data_indices;
 	for(int i=0; i<r1; i++){
 		for(int j=0; j<r2; j++){
@@ -51,10 +50,10 @@ sz_decompress_cp_preserve_3d_online_log(const unsigned char * compressed, size_t
 				T * data_pos[3] = {U_pos, V_pos, W_pos};
 				int index = i*dim0_offset + j*dim1_offset + k;
 				// get eb
-				if(*eb_quant_index_pos == 0){
+				if(*eb_quant_index_pos == 0 || *eb_quant_index_pos == eb_quant_index_max){
 					unpred_data_indices.insert(index);
 					for(int p=0; p<3; p++){
-						T cur_data = *(unpred_data_pos ++);
+						T cur_data = *(eb_zero_data_pos ++);
 						*(data_pos[p]) = (cur_data == 0) ? -100 : log2(fabs(cur_data));
 					}
 					eb_quant_index_pos ++;
@@ -74,29 +73,29 @@ sz_decompress_cp_preserve_3d_online_log(const unsigned char * compressed, size_t
 						T pred = d0 + d3 + d5 + d6 - d1 - d2 - d4;
 						*cur_log_data_pos = pred + 2 * (data_quant_index_pos[p] - intv_radius) * eb;
 					}
+					data_quant_index_pos += 3;
 				}
 				U_pos ++;
 				V_pos ++;
 				W_pos ++;
-				data_quant_index_pos += 3;
 			}
 		}
 	}
 	printf("recover data done\n");
-	unpred_data_pos = unpred_data;
+	eb_zero_data_pos = eb_zero_data;
 	for(int i=0; i<num_elements; i++){
 		if(unpred_data_indices.count(i)){
-			U[i] = *(unpred_data_pos++);
-			V[i] = *(unpred_data_pos++);
-			W[i] = *(unpred_data_pos++);
+			U[i] = *(eb_zero_data_pos++);
+			V[i] = *(eb_zero_data_pos++);
+			W[i] = *(eb_zero_data_pos++);
 		}
 		else{
-			U[i] = sign_map_u[i] ? exp2(U[i]) : -exp2(U[i]);
 			if(U[i] < -99) U[i] = 0;
-			V[i] = sign_map_v[i] ? exp2(V[i]) : -exp2(V[i]);
+			else U[i] = sign_map_u[i] ? exp2(U[i]) : -exp2(U[i]);
 			if(V[i] < -99) V[i] = 0;
-			W[i] = sign_map_w[i] ? exp2(W[i]) : -exp2(W[i]);
+			else V[i] = sign_map_v[i] ? exp2(V[i]) : -exp2(V[i]);
 			if(W[i] < -99) W[i] = 0;
+			else W[i] = sign_map_w[i] ? exp2(W[i]) : -exp2(W[i]);
 		}
 	}
 	free(sign_map_u);

@@ -7,13 +7,14 @@ using namespace std;
 template<typename T>
 void 
 transpose_2d(T * data, size_t r1, size_t r2){
+    T * tmp = (T *) malloc(r1 * r2 * sizeof(T));
     for(int i=0; i<r1; i++){
-        for(int j=0; j<i; j++){
-            T tmp = data[i*r2 + j];
-            data[i*r1 + j] = data[j*r1 + i];
-            data[j*r1 + i] = tmp;
+        for(int j=0; j<r2; j++){
+            tmp[j*r1 + i] = data[i*r2 + j];
         }
     }
+    memcpy(data, tmp, r1 * r2 * sizeof(T));
+    free(tmp);
 }
 
 int main(int argc, char ** argv){
@@ -27,6 +28,10 @@ int main(int argc, char ** argv){
     transpose_2d(U, r1, r2);
     cout << U[r2 + 3] << " " << U[3*r2 + 1] << endl;
     transpose_2d(V, r1, r2);
+    // swap dimension
+    int tmp = r1;
+    r1 = r2;
+    r2 = tmp;
 
     size_t result_size = 0;
     struct timespec start, end;

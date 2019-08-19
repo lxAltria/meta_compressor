@@ -14,6 +14,8 @@ sz_decompress_cp_preserve_2d_offline(const unsigned char * compressed, size_t r1
 	int base = 0;
 	read_variable_from_src(compressed_pos, base);
 	printf("base = %d\n", base);
+	double threshold = 0;
+	read_variable_from_src(compressed_pos, threshold);
 	size_t compressed_eb_size = 0;
 	read_variable_from_src(compressed_pos, compressed_eb_size);
 	size_t compressed_u_size = 0;
@@ -21,9 +23,9 @@ sz_decompress_cp_preserve_2d_offline(const unsigned char * compressed, size_t r1
 	size_t compressed_v_size = 0;
 	read_variable_from_src(compressed_pos, compressed_v_size);
 	printf("eb_size = %ld, u_size = %ld, v_size = %ld\n", compressed_eb_size, compressed_u_size, compressed_v_size);
-	int * type = Huffman_decode_tree_and_data(2*256, 2*num_elements, compressed_pos);
+	int * type = Huffman_decode_tree_and_data(2*1024, 2*num_elements, compressed_pos);
 	double * eb = (double *) malloc(num_elements*sizeof(double));
-	const double threshold=std::numeric_limits<float>::epsilon();
+	// const double threshold=std::numeric_limits<double>::epsilon();
 	for(int i=0; i<num_elements; i++){
 		if(type[i] == 0) eb[i] = 0;
 		else eb[i] = pow(base, type[i]) * threshold;
@@ -56,6 +58,8 @@ sz_decompress_cp_preserve_2d_offline_log(const unsigned char * compressed, size_
 	int base = 0;
 	read_variable_from_src(compressed_pos, base);
 	printf("base = %d\n", base);
+	double threshold = 0;
+	read_variable_from_src(compressed_pos, threshold);
 	size_t compressed_eb_size = 0;
 	read_variable_from_src(compressed_pos, compressed_eb_size);
 	size_t compressed_u_size = 0;
@@ -63,9 +67,9 @@ sz_decompress_cp_preserve_2d_offline_log(const unsigned char * compressed, size_
 	size_t compressed_v_size = 0;
 	read_variable_from_src(compressed_pos, compressed_v_size);
 	printf("eb_size = %ld, u_size = %ld, v_size = %ld\n", compressed_eb_size, compressed_u_size, compressed_v_size);
-	int * type = Huffman_decode_tree_and_data(2*256, num_elements, compressed_pos);
+	int * type = Huffman_decode_tree_and_data(2*1024, num_elements, compressed_pos);
 	double * eb = (double *) malloc(num_elements*sizeof(double));
-	const double threshold=std::numeric_limits<float>::epsilon();
+	// const double threshold=std::numeric_limits<float>::epsilon();
 	for(int i=0; i<num_elements; i++){
 		if(type[i] == 0) eb[i] = 0;
 		else eb[i] = pow(base, type[i]) * threshold;
@@ -73,11 +77,16 @@ sz_decompress_cp_preserve_2d_offline_log(const unsigned char * compressed, size_
 	size_t sign_map_size = (num_elements - 1)/8 + 1;
 	unsigned char * sign_map_u = convertByteArray2IntArray_fast_1b_sz(num_elements, compressed_pos, sign_map_size);	
 	unsigned char * sign_map_v = convertByteArray2IntArray_fast_1b_sz(num_elements, compressed_pos, sign_map_size);	
+	printf("before data: %ld\n", compressed_pos - compressed);
 	U = sz_decompress_2d_with_eb<T>(compressed_pos, eb, r1, r2);
 	compressed_pos += compressed_u_size;
 	for(int i=0; i<num_elements; i++){
 		if(U[i] < -99) U[i] = 0;
 		else U[i] = sign_map_u[i] ? exp2(U[i]) : -exp2(U[i]);
+		if(U[i]>1e-4){
+			printf("%d, %.4g, eb = %.4g\n", i, U[i], eb[i]);
+			exit(0);
+		}
 	}
 	V = sz_decompress_2d_with_eb<T>(compressed_pos, eb, r1, r2);
 	for(int i=0; i<num_elements; i++){
@@ -107,6 +116,8 @@ sz_decompress_cp_preserve_2d_online(const unsigned char * compressed, size_t r1,
 	int base = 0;
 	read_variable_from_src(compressed_pos, base);
 	printf("base = %d\n", base);
+	double threshold = 0;
+	read_variable_from_src(compressed_pos, threshold);
 	int intv_radius = 0;
 	read_variable_from_src(compressed_pos, intv_radius);
 	const int capacity = (intv_radius << 1);
@@ -114,15 +125,16 @@ sz_decompress_cp_preserve_2d_online(const unsigned char * compressed, size_t r1,
 	read_variable_from_src(compressed_pos, unpred_data_count);
 	const T * unpred_data_pos = (T *) compressed_pos;
 	compressed_pos += unpred_data_count*sizeof(T);
-	int * eb_quant_index = Huffman_decode_tree_and_data(2*256, 2*num_elements, compressed_pos);
+	int * eb_quant_index = Huffman_decode_tree_and_data(2*1024, 2*num_elements, compressed_pos);
 	int * data_quant_index = Huffman_decode_tree_and_data(2*capacity, 2*num_elements, compressed_pos);
+	printf("pos = %ld\n", compressed_pos - compressed);
 	U = (T *) malloc(num_elements*sizeof(T));
 	V = (T *) malloc(num_elements*sizeof(T));
 	T * U_pos = U;
 	T * V_pos = V;
 	int * eb_quant_index_pos = eb_quant_index;
 	int * data_quant_index_pos = data_quant_index;
-	const double threshold=std::numeric_limits<float>::epsilon();
+	// const double threshold=std::numeric_limits<float>::epsilon();
 	for(int i=0; i<r1; i++){
 		for(int j=0; j<r2; j++){
 			// get eb
@@ -180,7 +192,7 @@ sz_decompress_cp_preserve_2d_online_log(const unsigned char * compressed, size_t
 	const T * unpred_data = (T *) compressed_pos;
 	const T * unpred_data_pos = unpred_data;
 	compressed_pos += unpred_data_count*sizeof(T);
-	int * eb_quant_index = Huffman_decode_tree_and_data(2*256, num_elements, compressed_pos);
+	int * eb_quant_index = Huffman_decode_tree_and_data(2*1024, num_elements, compressed_pos);
 	int * data_quant_index = Huffman_decode_tree_and_data(2*capacity, 2*num_elements, compressed_pos);
 	U = (T *) malloc(num_elements*sizeof(T));
 	V = (T *) malloc(num_elements*sizeof(T));
@@ -225,10 +237,10 @@ sz_decompress_cp_preserve_2d_online_log(const unsigned char * compressed, size_t
 			V[i] = *(unpred_data_pos++);
 		}
 		else{
-			U[i] = sign_map_u[i] ? exp2(U[i]) : -exp2(U[i]);
 			if(U[i] < -99) U[i] = 0;
-			V[i] = sign_map_v[i] ? exp2(V[i]) : -exp2(V[i]);
+			else U[i] = sign_map_u[i] ? exp2(U[i]) : -exp2(U[i]);
 			if(V[i] < -99) V[i] = 0;
+			else V[i] = sign_map_v[i] ? exp2(V[i]) : -exp2(V[i]);
 		}
 	}
 	free(sign_map_u);

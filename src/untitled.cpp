@@ -11,29 +11,25 @@ inline double max_eb_to_keep_sign(const T positive, const T negative, int degree
     printf("%.4f, %.4f\n", negative, positive);
     exit(0);
   }
-  if((negative == 0) || (positive == 0)){
+  if((negative < std::numeric_limits<double>::epsilon()) || (positive < std::numeric_limits<double>::epsilon())){
     return 1;
   }
-  // double c = fabs(positive - negative) / (positive + negative);
-  double P = 0, N = 0;
+  double c = 0;
   switch(degree){
     case 1:
-    	P = positive;
-    	N = negative;
-		break;
+      c = positive / negative;
+      break;
     case 2:
-    	P = sqrt(positive);
-    	N = sqrt(negative);
-    	break;
+      c = sqrt(positive / negative);
+      break;
     case 3:
-    	P = cbrt(positive);
-    	N = cbrt(negative);
-    	break;
+      c = cbrt(positive / negative);
+      break;
     default:
-		printf("Degree higher than 3 not supported yet\n");
-		exit(0);
+      printf("Degree higher than 3 not supported yet\n");
+      exit(0);
   }
-  return fabs(P - N)/(P + N);
+  return MIN(1, fabs(c - 1) / (c + 1));  
 }
 
 // maximal error bound to keep the sign of u0v1 - u0v2 + u1v2 - u1v0 + u2v0 - u2v1
@@ -50,24 +46,36 @@ inline double max_eb_to_keep_sign_det2x2(const T u0, const T u1, const T u2, con
   return max_eb_to_keep_sign(positive, negative, 2);
 }
 
+// maximal error bound to keep the sign of u0v1 - u1v0
 template<typename T>
-inline double max_eb_to_keep_sign_2d_offline_2(const T u0, const T u1, const int degree=2){
+inline double max_eb_to_keep_sign_2(const T u0, const T u1, const T v0, const T v1){
   double positive = 0;
   double negative = 0;
-  accumulate(u0, positive, negative);
-  accumulate(u1, positive, negative);
-  return max_eb_to_keep_sign(positive, negative, degree);
+  accumulate(u0*v1, positive, negative);
+  accumulate(-u1*v0, positive, negative);
+  return max_eb_to_keep_sign(positive, negative, 2);
 }
 
+// maximal error bound to keep the sign of u0v1 - u1v0 + u1v2 - u2v1
 template<typename T>
-inline double max_eb_to_keep_sign_2d_offline_4(const T u0, const T u1, const T u2, const T u3, const int degree=2){
+inline double max_eb_to_keep_sign_4(const T u0, const T u1, const T u2, const T v0, const T v1, const T v2){
   double positive = 0;
   double negative = 0;
-  accumulate(u0, positive, negative);
-  accumulate(u1, positive, negative);
-  accumulate(u2, positive, negative);
-  accumulate(u3, positive, negative);
-  return max_eb_to_keep_sign(positive, negative, degree);
+  // accumulate(u0*v1, positive, negative);
+  // accumulate(-u1*v0, positive, negative);
+  // accumulate(u1*v2, positive, negative);
+  // accumulate(-u2*v1, positive, negative);
+  if(u0 * u2 > 0){
+	accumulate(u0*v1, positive, negative);
+	accumulate(-u2*v1, positive, negative);
+  }
+  else accumulate((u0-u2)*v1, positive, negative);
+  if(v0 * v2 > 0){
+	accumulate(-u1*v0, positive, negative);
+	accumulate((v2 - v0)*u1, positive, negative);  	
+  }
+  else accumulate((u0-u2)*v1, positive, negative);
+  return max_eb_to_keep_sign(positive, negative, 2);
 }
 
 // det(c) = (x0 - x2)*(y1 - y2) - (x1 - x2)*(y0 - y2)
@@ -119,8 +127,7 @@ inline double max_eb_to_keep_sign_eigen_delta_2(const T u0, const T u1, const T 
   }
   T m = c[1]*c[2] - c[0]*c[3];
   T C = (-m) * (u0*v1 - u0*v2 + u1*v2 - u1*v0 + u2*v0 - u2*v1);
-  if(C == 0) return 0;
-  if(C < 0) return eb;
+  if(C <= 0) return eb;
   {
     std::vector<T> coeff(6);
     coeff[0] = c[0]*u0;
@@ -162,29 +169,27 @@ inline double max_eb_to_keep_position_and_type(const T u0, const T u1, const T u
 		if(f1 && f2 && f3){
 			// critical point found
 			eb = 1;
-			double eb1 = MIN(max_eb_to_keep_sign_2d_offline_2(u2v0, -u0v2), max_eb_to_keep_sign_2d_offline_4(u0v1, -u1v0, u1v2, -u2v1));
-			double eb2 = MIN(max_eb_to_keep_sign_2d_offline_2(u1v2, -u2v1), max_eb_to_keep_sign_2d_offline_4(u0v1, -u1v0, u2v0, -u0v2));
-			double eb3 = MIN(max_eb_to_keep_sign_2d_offline_2(u0v1, -u1v0), max_eb_to_keep_sign_2d_offline_4(u1v2, -u2v1, u2v0, -u0v2));
-			double eb4 = MIN(eb3, max_eb_to_keep_sign_eigen_delta_2(u0, u1, u2, v0, v1, v2, x0, x1, x2, y0, y1, y2));
-			eb = MIN(eb1, eb2);
-			eb = MIN(eb, eb4);
+			eb = MIN(max_eb_to_keep_sign_2(u2, u0, v2, v0), eb);
+			eb = MIN(max_eb_to_keep_sign_2(u1, u2, v1, v2), eb);
+			eb = MIN(max_eb_to_keep_sign_2(u0, u1, v0, v1), eb);
+			eb = MIN(max_eb_to_keep_sign_4(u0, u1, u2, v0, v1, v2), eb);
+			eb = MIN(max_eb_to_keep_sign_4(u2, u0, u1, v2, v0, v1), eb);
+			eb = MIN(max_eb_to_keep_sign_4(u1, u2, u0, v1, v2, v0), eb);
+			eb = MIN(max_eb_to_keep_sign_eigen_delta_2(u0, u1, u2, v0, v1, v2, x0, x1, x2, y0, y1, y2), eb);
 		}
 		else{
 			// no critical point
 			eb = 0;
 			if(!f1){
-				double eb_cur = MIN(max_eb_to_keep_sign_2d_offline_2(u2v0, -u0v2), max_eb_to_keep_sign_2d_offline_4(u0v1, -u1v0, u1v2, -u2v1));
-				// double eb_cur = MIN(max_eb_to_keep_sign_2(u2, u0, v2, v0), max_eb_to_keep_sign_4(u0, u1, u2, v0, v1, v2));
+				double eb_cur = MIN(max_eb_to_keep_sign_2(u2, u0, v2, v0), max_eb_to_keep_sign_4(u0, u1, u2, v0, v1, v2));
 				eb = MAX(eb, eb_cur);
 			}
 			if(!f2){
-				double eb_cur = MIN(max_eb_to_keep_sign_2d_offline_2(u1v2, -u2v1), max_eb_to_keep_sign_2d_offline_4(u0v1, -u1v0, u2v0, -u0v2));
-				// double eb_cur = MIN(max_eb_to_keep_sign_2(u1, u2, v1, v2), max_eb_to_keep_sign_4(u2, u0, u1, v2, v0, v1));
+				double eb_cur = MIN(max_eb_to_keep_sign_2(u1, u2, v1, v2), max_eb_to_keep_sign_4(u2, u0, u1, v2, v0, v1));
 				eb = MAX(eb, eb_cur);
 			}
 			if(!f3){
-				double eb_cur = MIN(max_eb_to_keep_sign_2d_offline_2(u0v1, -u1v0), max_eb_to_keep_sign_2d_offline_4(u1v2, -u2v1, u2v0, -u0v2));
-				// double eb_cur = MIN(max_eb_to_keep_sign_2(u0, u1, v0, v1), max_eb_to_keep_sign_4(u1, u2, u0, v1, v2, v0));
+				double eb_cur = MIN(max_eb_to_keep_sign_2(u0, u1, v0, v1), max_eb_to_keep_sign_4(u1, u2, u0, v1, v2, v0));
 				eb = MAX(eb, eb_cur);
 			}
 			// eb = MIN(eb, DEFAULT_EB);
@@ -240,22 +245,22 @@ sz_compress_cp_preserve_2d_offline(const T * U, const T * V, size_t r1, size_t r
 	int * eb_quant_index_pos = eb_quant_index;
 	const int base = 4;
 	double log2_of_base = log2(base);
-	const double threshold = std::numeric_limits<double>::epsilon();
+	const double threshold = std::numeric_limits<float>::epsilon();
 	for(int i=0; i<num_elements; i++){
 		eb_u[i] = fabs(U[i]) * eb[i];
-		*(eb_quant_index_pos ++) = eb_exponential_quantize(eb_u[i], base, log2_of_base, threshold);
+		*(eb_quant_index_pos ++) = eb_exponential_quantize(eb_u[i], base, log2_of_base);
 		if(eb_u[i] < threshold) eb_u[i] = 0;
 	}
 	for(int i=0; i<num_elements; i++){
 		eb_v[i] = fabs(V[i]) * eb[i];
-		*(eb_quant_index_pos ++) = eb_exponential_quantize(eb_v[i], base, log2_of_base, threshold);
+		*(eb_quant_index_pos ++) = eb_exponential_quantize(eb_v[i], base, log2_of_base);
 		if(eb_v[i] < threshold) eb_v[i] = 0;
 	}
 	free(eb);
 	printf("quantize eb done\n");
 	unsigned char * compressed_eb = (unsigned char *) malloc(2*num_elements*sizeof(int));
 	unsigned char * compressed_eb_pos = compressed_eb; 
-	Huffman_encode_tree_and_data(2*1024, eb_quant_index, 2*num_elements, compressed_eb_pos);
+	Huffman_encode_tree_and_data(2*256, eb_quant_index, 2*num_elements, compressed_eb_pos);
 	size_t compressed_eb_size = compressed_eb_pos - compressed_eb;
 	size_t compressed_u_size = 0;
 	size_t compressed_v_size = 0;
@@ -268,7 +273,6 @@ sz_compress_cp_preserve_2d_offline(const T * U, const T * V, size_t r1, size_t r
 	unsigned char * compressed = (unsigned char *) malloc(compressed_size);
 	unsigned char * compressed_pos = compressed;
 	write_variable_to_dst(compressed_pos, base);
-	write_variable_to_dst(compressed_pos, threshold);
 	write_variable_to_dst(compressed_pos, compressed_eb_size);
 	write_variable_to_dst(compressed_pos, compressed_u_size);
 	write_variable_to_dst(compressed_pos, compressed_v_size);
@@ -346,15 +350,16 @@ sz_compress_cp_preserve_2d_offline_log(const T * U, const T * V, size_t r1, size
 	int * eb_quant_index_pos = eb_quant_index;
 	const int base = 2;
 	double log2_of_base = log2(base);
-	const double threshold = std::numeric_limits<double>::epsilon();
+	const double threshold = std::numeric_limits<float>::epsilon();
 	for(int i=0; i<num_elements; i++){
 		eb[i] = log2(1 + eb[i]);
-		*(eb_quant_index_pos ++) = eb_exponential_quantize(eb[i], base, log2_of_base, threshold);
+		*(eb_quant_index_pos ++) = eb_exponential_quantize(eb[i], base, log2_of_base);
+		if(eb[i] < threshold) eb[i] = 0;
 	}
 	printf("quantize eb done\n");
 	unsigned char * compressed_eb = (unsigned char *) malloc(num_elements*sizeof(int));
 	unsigned char * compressed_eb_pos = compressed_eb; 
-	Huffman_encode_tree_and_data(2*1024, eb_quant_index, num_elements, compressed_eb_pos);
+	Huffman_encode_tree_and_data(2*256, eb_quant_index, num_elements, compressed_eb_pos);
 	size_t compressed_eb_size = compressed_eb_pos - compressed_eb;
 	size_t compressed_u_size = 0;
 	size_t compressed_v_size = 0;
@@ -364,17 +369,15 @@ sz_compress_cp_preserve_2d_offline_log(const T * U, const T * V, size_t r1, size
 	free(log_V);
 	printf("eb_size = %ld, log_u_size = %ld, log_v_size = %ld\n", compressed_eb_size, compressed_u_size, compressed_v_size);
 	free(eb);
-	compressed_size = sizeof(int) + 2*sign_map_size + sizeof(size_t) + sizeof(double) + compressed_eb_size + sizeof(size_t) + compressed_u_size + sizeof(size_t) + compressed_v_size;
+	compressed_size = sizeof(int) + 2*sign_map_size + sizeof(size_t) + compressed_eb_size + sizeof(size_t) + compressed_u_size + sizeof(size_t) + compressed_v_size;
 	unsigned char * compressed = (unsigned char *) malloc(compressed_size);
 	unsigned char * compressed_pos = compressed;
 	write_variable_to_dst(compressed_pos, base);
-	write_variable_to_dst(compressed_pos, threshold);
 	write_variable_to_dst(compressed_pos, compressed_eb_size);
 	write_variable_to_dst(compressed_pos, compressed_u_size);
 	write_variable_to_dst(compressed_pos, compressed_v_size);
 	write_array_to_dst(compressed_pos, compressed_eb, compressed_eb_size);
 	write_array_to_dst(compressed_pos, sign_map_compressed, 2*sign_map_size);
-	printf("before data: %ld\n", compressed_pos - compressed);
 	write_array_to_dst(compressed_pos, compressed_u, compressed_u_size);
 	write_array_to_dst(compressed_pos, compressed_v, compressed_v_size);
 	free(sign_map_compressed);
@@ -483,34 +486,27 @@ triangle mesh x0, x1, x2, derive cp-preserving eb for x2 given x0, x1
 */
 template<typename T>
 double 
-derive_cp_eb_for_positions_online(const T u0, const T u1, const T u2, const T v0, const T v1, const T v2, const T c[4]){//, conditions_2d& cond){
-	// if(!cond.computed){
-	//     double M0 = u2*v0 - u0*v2;
-	//     double M1 = u1*v2 - u2*v1;
-	//     double M2 = u0*v1 - u1*v0;
-	//     double M = M0 + M1 + M2;
-	//     cond.singular = (M == 0);
-	//     if(cond.singular) return 0;
-	//     cond.flags[0] = (M0 == 0) || (M / M0 >= 1);
-	//     cond.flags[1] = (M1 == 0) || (M / M1 >= 1);
-	//     cond.flags[2] = (M2 == 0) || (M / M2 >= 1);
-	//     cond.computed = true;
-	// }
-	// else{
-	//     if(cond.singular) return 0;
-	// }
-	// const bool * flag = cond.flags;
-	// bool f1 = flag[0];
-	// bool f2 = flag[1]; 
-	// bool f3 = flag[2];
-	double M0 = u2*v0 - u0*v2;
-    double M1 = u1*v2 - u2*v1;
-    double M2 = u0*v1 - u1*v0;
-    double M = M0 + M1 + M2;
-	if(M == 0) return 0;
-	bool f1 = (M0 == 0) || (M / M0 >= 1);
-	bool f2 = (M1 == 0) || (M / M1 >= 1); 
-	bool f3 = (M2 == 0) || (M / M2 >= 1);
+derive_cp_eb_for_positions_online(const T u0, const T u1, const T u2, const T v0, const T v1, const T v2, const T c[4], conditions_2d& cond){
+	cond.computed = false;
+	if(!cond.computed){
+	    double M0 = u1*v2 - u2*v1;
+	    double M1 = u2*v0 - u0*v2;
+	    double M2 = u0*v1 - u1*v0;
+	    double M = M0 + M1 + M2;
+	    cond.singular = (M == 0);
+	    if(cond.singular) return 0;
+	    cond.flags[0] = (M0 == 0) || (M / M0 > 1);
+	    cond.flags[1] = (M1 == 0) || (M / M1 > 1);
+	    cond.flags[2] = (M2 == 0) || (M / M2 > 1);
+	    cond.computed = true;
+	}
+	else{
+	    if(cond.singular) return 0;
+	}
+	const bool * flag = cond.flags;
+	bool f1 = flag[0];
+	bool f2 = flag[1]; 
+	bool f3 = flag[2];
 	double eb = 0;
 	if(f1 && f2 && f3){
 		// eb = max_eb_to_keep_position_online(u0v1, u1v0, u1v2, u2v1, u2v0, u0v2);
@@ -594,8 +590,25 @@ sz_compress_cp_preserve_2d_online(const T * U, const T * V, size_t r1, size_t r2
 	for(int i=0; i<6; i++){
 		get_adjugate_matrix_for_position(x[i][0], x[i][1], x[i][2], y[i][0], y[i][1], y[i][2], inv_C[i]);
 	}
-	double threshold = std::numeric_limits<double>::epsilon();
-	// conditions_2d cond;
+	int index_offset[6][2][2];
+	for(int i=0; i<6; i++){
+		for(int j=0; j<2; j++){
+			index_offset[i][j][0] = x[i][j] - x[i][2];
+			index_offset[i][j][1] = y[i][j] - y[i][2];
+		}
+	}
+	int simplex_offset[6];
+	{
+		// lower simplex -> 0, upper simplex -> 1
+		simplex_offset[0] = - 2*r2 - 2; 
+		simplex_offset[1] = - 2*r2 - 2 + 1; 
+		simplex_offset[2] = - 2; 
+		simplex_offset[3] = 1; 
+		simplex_offset[4] = 0; 
+		simplex_offset[5] = -2*r2 + 1; 
+	}
+	conditions_2d * conds = (conditions_2d *) malloc(2*num_elements * sizeof(conditions_2d));
+	for(int i=0; i<2*num_elements; i++) conds[i].computed = false;
 	for(int i=0; i<r1; i++){
 		// printf("start %d row\n", i);
 		T * cur_U_pos = U_pos;
@@ -604,9 +617,17 @@ sz_compress_cp_preserve_2d_online(const T * U, const T * V, size_t r1, size_t r2
 			double required_eb = max_pwr_eb;
 			// derive eb given six adjacent triangles
 			for(int k=0; k<6; k++){
-				if(inbound(i*(int)r2 + j + offsets[k], 0, (int)num_elements) && inbound(i*(int)r2 + j + offsets[k+1], 0, (int)num_elements)){
+				bool in_mesh = true;
+				for(int p=0; p<2; p++){
+					if(!(in_range(i + index_offset[k][p][0], (int)r1) && in_range(j + index_offset[k][p][1], (int)r2))){
+						in_mesh = false;
+						break;
+					}
+				}
+				if(in_mesh){
+					int index = simplex_offset[k] + 2*i*r2 + 2*j;
 					required_eb = MIN(required_eb, derive_cp_eb_for_positions_online(cur_U_pos[offsets[k]], cur_U_pos[offsets[k+1]], cur_U_pos[0],
-						cur_V_pos[offsets[k]], cur_V_pos[offsets[k+1]], cur_V_pos[0], inv_C[k]));
+						cur_V_pos[offsets[k]], cur_V_pos[offsets[k+1]], cur_V_pos[0], inv_C[k], conds[index]));
 				}
 			}
 			if(required_eb > 0){
@@ -617,36 +638,33 @@ sz_compress_cp_preserve_2d_online(const T * U, const T * V, size_t r1, size_t r2
 					T * cur_data_pos = (k == 0) ? cur_U_pos : cur_V_pos;
 					T cur_data = *cur_data_pos;
 					double abs_eb = fabs(cur_data) * required_eb;
-					eb_quant_index_pos[k] = eb_exponential_quantize(abs_eb, base, log_of_base, threshold);
-					if(eb_quant_index_pos[k] > 0){
-						// get adjacent data and perform Lorenzo
-						/*
-							d2 X
-							d0 d1
-						*/
-						T d0 = (i && j) ? cur_data_pos[-1 - r2] : 0;
-						T d1 = (i) ? cur_data_pos[-r2] : 0;
-						T d2 = (j) ? cur_data_pos[-1] : 0;
-						T pred = d1 + d2 - d0;
-						double diff = cur_data - pred;
-						double quant_diff = fabs(diff) / abs_eb + 1;
-						if(quant_diff < capacity){
-							quant_diff = (diff > 0) ? quant_diff : -quant_diff;
-							int quant_index = (int)(quant_diff/2) + intv_radius;
-							data_quant_index_pos[k] = quant_index;
-							decompressed[k] = pred + 2 * (quant_index - intv_radius) * abs_eb; 
-							// check original data
-							if(fabs(decompressed[k] - cur_data) >= abs_eb){
-								unpred_flag = true;
-								break;
-							}
-						}
-						else{
+					eb_quant_index_pos[k] = eb_exponential_quantize(abs_eb, base, log_of_base);
+					// get adjacent data and perform Lorenzo
+					/*
+						d2 X
+						d0 d1
+					*/
+					T d0 = (i && j) ? cur_data_pos[-1 - r2] : 0;
+					T d1 = (i) ? cur_data_pos[-r2] : 0;
+					T d2 = (j) ? cur_data_pos[-1] : 0;
+					T pred = d1 + d2 - d0;
+					double diff = cur_data - pred;
+					double quant_diff = fabs(diff) / abs_eb + 1;
+					if(quant_diff < capacity){
+						quant_diff = (diff > 0) ? quant_diff : -quant_diff;
+						int quant_index = (int)(quant_diff/2) + intv_radius;
+						data_quant_index_pos[k] = quant_index;
+						decompressed[k] = pred + 2 * (quant_index - intv_radius) * abs_eb; 
+						// check original data
+						if(fabs(decompressed[k] - cur_data) >= abs_eb){
 							unpred_flag = true;
 							break;
 						}
 					}
-					else unpred_flag = true;
+					else{
+						unpred_flag = true;
+						break;
+					}
 				}
 				if(unpred_flag){
 					// recover quant index
@@ -685,15 +703,13 @@ sz_compress_cp_preserve_2d_online(const T * U, const T * V, size_t r1, size_t r2
 	unsigned char * compressed = (unsigned char *) malloc(2*num_elements*sizeof(T));
 	unsigned char * compressed_pos = compressed;
 	write_variable_to_dst(compressed_pos, base);
-	write_variable_to_dst(compressed_pos, threshold);
 	write_variable_to_dst(compressed_pos, intv_radius);
 	size_t unpredictable_count = unpred_data.size();
 	write_variable_to_dst(compressed_pos, unpredictable_count);
 	write_array_to_dst(compressed_pos, (T *)&unpred_data[0], unpredictable_count);	
-	Huffman_encode_tree_and_data(2*1024, eb_quant_index, 2*num_elements, compressed_pos);
+	Huffman_encode_tree_and_data(2*256, eb_quant_index, 2*num_elements, compressed_pos);
 	free(eb_quant_index);
 	Huffman_encode_tree_and_data(2*capacity, data_quant_index, 2*num_elements, compressed_pos);
-	printf("pos = %ld\n", compressed_pos - compressed);
 	free(data_quant_index);
 	compressed_size = compressed_pos - compressed;
 	return compressed;	
@@ -772,24 +788,22 @@ sz_compress_cp_preserve_2d_online_log(const T * U, const T * V, size_t r1, size_
 	int index_offset[6][2][2];
 	for(int i=0; i<6; i++){
 		for(int j=0; j<2; j++){
-			index_offset[i][j][0] = x[i][j] - x[i][2];
-			index_offset[i][j][1] = y[i][j] - y[i][2];
+			index_offset[i][j][0] = y[i][j] - y[i][2];
+			index_offset[i][j][1] = x[i][j] - x[i][2];
 		}
 	}
-	// int simplex_offset[6];
-	// {
-	// 	// lower simplex -> 0, upper simplex -> 1
-	// 	simplex_offset[0] = - 2*r2 - 2; 
-	// 	simplex_offset[1] = - 2*r2 - 2 + 1; 
-	// 	simplex_offset[2] = - 2; 
-	// 	simplex_offset[3] = 1; 
-	// 	simplex_offset[4] = 0; 
-	// 	simplex_offset[5] = -2*r2 + 1; 
-	// }
-	// conditions_2d * conds = (conditions_2d *) malloc(2*num_elements * sizeof(conditions_2d));
-	// for(int i=0; i<2*num_elements; i++) conds[i].computed = false;
-	// int * count = (int *) malloc(2*num_elements*sizeof(int));
-	// memset(count, 0, 2*num_elements*sizeof(int));
+	int simplex_offset[6];
+	{
+		// lower simplex -> 0, upper simplex -> 1
+		simplex_offset[0] = - 2*r2 - 2; 
+		simplex_offset[1] = - 2*r2 - 2 + 1; 
+		simplex_offset[2] = - 2; 
+		simplex_offset[3] = 1; 
+		simplex_offset[4] = 0; 
+		simplex_offset[5] = -2*r2 + 1; 
+	}
+	conditions_2d * conds = (conditions_2d *) malloc(2*num_elements * sizeof(conditions_2d));
+	for(int i=0; i<2*num_elements; i++) conds[i].computed = false;
 	T * cur_log_U_pos = log_U;
 	T * cur_log_V_pos = log_V;
 	T * cur_U_pos = decompressed_U;
@@ -808,11 +822,9 @@ sz_compress_cp_preserve_2d_online_log(const T * U, const T * V, size_t r1, size_
 					}
 				}
 				if(in_mesh){
-					// int index = simplex_offset[k] + 2*i*r2 + 2*j;
-					// conds[index].computed = false;
-					// count[index] ++;
+					int index = simplex_offset[k] + 2*i*r2 + 2*j;
 					required_eb = MIN(required_eb, derive_cp_eb_for_positions_online(cur_U_pos[offsets[k]], cur_U_pos[offsets[k+1]], cur_U_pos[0],
-						cur_V_pos[offsets[k]], cur_V_pos[offsets[k+1]], cur_V_pos[0], inv_C[k]));
+						cur_V_pos[offsets[k]], cur_V_pos[offsets[k+1]], cur_V_pos[0], inv_C[k], conds[index]));
 				}
 			}
 			if((required_eb > 0) && (*cur_U_pos != 0) && (*cur_V_pos != 0)){
@@ -884,18 +896,7 @@ sz_compress_cp_preserve_2d_online_log(const T * U, const T * V, size_t r1, size_
 			cur_U_pos ++, cur_V_pos ++;
 		}
 	}
-	// int zero = 0;
-	// for(int i=0; i<2*num_elements; i++){
-	// 	if(count[i]){
-	// 		if(count[i] != 3){
-	// 			printf("i = %d, count[i] = %d\n", i, count[i]);
-	// 			exit(0);
-	// 		}
-	// 	}
-	// 	else zero ++;
-	// }
-	// printf("zero = %d, nonzero = %d\n", zero, 2*num_elements - zero);
-	// free(conds);
+	free(conds);
 	free(log_U);
 	free(log_V);
 	free(decompressed_U);
@@ -910,7 +911,7 @@ sz_compress_cp_preserve_2d_online_log(const T * U, const T * V, size_t r1, size_
 	size_t unpredictable_count = unpred_data.size();
 	write_variable_to_dst(compressed_pos, unpredictable_count);
 	write_array_to_dst(compressed_pos, (T *)&unpred_data[0], unpredictable_count);	
-	Huffman_encode_tree_and_data(2*1024, eb_quant_index, num_elements, compressed_pos);
+	Huffman_encode_tree_and_data(2*256, eb_quant_index, num_elements, compressed_pos);
 	free(eb_quant_index);
 	Huffman_encode_tree_and_data(2*capacity, data_quant_index, 2*num_elements, compressed_pos);
 	free(data_quant_index);

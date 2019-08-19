@@ -5,29 +5,18 @@
 #include "sz_compression_utils.hpp"
 #include <unordered_map>
 
-#include <fstream>
-template<typename Type>
-void write_file(const char * file, Type * data, size_t num_elements){
-	std::ofstream fout(file, std::ios::binary);
-	fout.write(reinterpret_cast<const char*>(&data[0]), num_elements*sizeof(Type));
-	fout.close();
-}
-
-typedef struct conditions{
+typedef struct conditions_3d{
 	bool computed;
 	bool singular;
 	bool flags[4];
-	conditions(){
+	conditions_3d(){
 		computed = false;
 		singular = false;
 		for(int i=0; i<4; i++){
 			flags[i] = false;
 		}
 	}
-}conditions;
-inline int get_index(int i, int j, int k, int d0, int d1){
-	return i*d0 + j*d1 + k;
-}
+}conditions_3d;
 
 // maximal error bound to keep the sign of A*(1 + e_1) + B*(1 + e_2) + C*(1+e_3) + D
 template<typename T>
@@ -36,10 +25,66 @@ inline double max_eb_to_keep_sign_3d_online(const T A, const T B, const T C, con
 	return fabs(A + B + C + D) / (fabs(A) + fabs(B) + fabs(C) + fabs(D));
 }
 
+// template<typename T>
+// double 
+// max_eb_to_keep_type_3d_online(const T u0, const T u1, const T u2, const T u3, const T v0, const T v1, const T v2, const T v3,
+// 	const T w0, const T w1, const T w2, const T w3, const T C[3][3]){
+// Ax^3 + Bx^2 + Cx + D = 0
+	// trace = c00 (u0 - u3) + c10 (u1 - u3) + c20 (u2 - u3) + c01 (v0 - v3) + 
+	//  c11 (v1 - v3) + c21 (v2 - v3) + c02 (w0 - w3) + c12 (w1 - w3) + 
+	//  c22 (w2 - w3)
+// det = (c02 c11 c20 - c01 c12 c20 - c02 c10 c21 + c00 c12 c21 + c01 c10 c22 -
+//     c00 c11 c22) (-u1 v2 w0 + u1 v3 w0 + u0 v2 w1 - u0 v3 w1 + 
+//    u1 v0 w2 - u0 v1 w2 + u0 v3 w2 - u1 v3 w2 + 
+//    u3 (-v1 w0 + v2 w0 + v0 w1 - v2 w1 - v0 w2 + v1 w2) - u1 v0 w3 + 
+//    u0 v1 w3 - u0 v2 w3 + u1 v2 w3 + 
+//    u2 (-v3 w0 - v0 w1 + v3 w1 + v1 (w0 - w3) + v0 w3))
+// A = 1
+// B = Pu3 + Qv3 + Rw3 + S
+// 	P = (-c00 - c10 - c20)
+// 	Q = (-c00 - c10 - c20)
+// 	R = (-c02 - c12 - c22)
+// 	S = c00 u0 + c10 u1 + c20 u2 + c01 v0 + c11 v1 + c21 v2+ c02 w0 + c12 w1 + c22 w2
+// // C = Pu3 + Qv3 + Rw3 + S
+// 	P = (-c01 c10 v0 + c00 c11 v0 - c01 c20 v0 + c00 c21 v0 + c01 c10 v1 - 
+//   c00 c11 v1 - c11 c20 v1 + c10 c21 v1 + c01 c20 v2 + c11 c20 v2 - 
+//   c00 c21 v2 - c10 c21 v2 - c02 c10 w0 + c00 c12 w0 - c02 c20 w0 + 
+//   c00 c22 w0 + c02 c10 w1 - c00 c12 w1 - c12 c20 w1 + c10 c22 w1 + 
+//   c02 c20 w2 + c12 c20 w2 - c00 c22 w2 - c10 c22 w2)
+// 	Q = (c01 c10 u0 - c00 c11 u0 + c01 c20 u0 - c00 c21 u0 - c01 c10 u1 + 
+//   c00 c11 u1 + c11 c20 u1 - c10 c21 u1 - c01 c20 u2 - c11 c20 u2 + 
+//   c00 c21 u2 + c10 c21 u2 - c02 c11 w0 + c01 c12 w0 - c02 c21 w0 + 
+//   c01 c22 w0 + c02 c11 w1 - c01 c12 w1 - c12 c21 w1 + c11 c22 w1 + 
+//   c02 c21 w2 + c12 c21 w2 - c01 c22 w2 - c11 c22 w2)
+// 	R = (c02 c10 u0 - c00 c12 u0 + c02 c20 u0 - c00 c22 u0 - c02 c10 u1 + 
+//   c00 c12 u1 + c12 c20 u1 - c10 c22 u1 - c02 c20 u2 - c12 c20 u2 + 
+//   c00 c22 u2 + c10 c22 u2 + c02 c11 v0 - c01 c12 v0 + c02 c21 v0 - 
+//   c01 c22 v0 - c02 c11 v1 + c01 c12 v1 + c12 c21 v1 - c11 c22 v1 - 
+//   c02 c21 v2 - c12 c21 v2 + c01 c22 v2 + c11 c22 v2)
+// 	S = c01 c10 u1 v0 - c00 c11 u1 v0 + c01 c20 u2 v0 - c00 c21 u2 v0 - 
+//  c01 c10 u0 v1 + c00 c11 u0 v1 + c11 c20 u2 v1 - c10 c21 u2 v1 - 
+//  c01 c20 u0 v2 + c00 c21 u0 v2 - c11 c20 u1 v2 + c10 c21 u1 v2 + 
+//  c02 c10 u1 w0 - c00 c12 u1 w0 + c02 c20 u2 w0 - c00 c22 u2 w0 + 
+//  c02 c11 v1 w0 - c01 c12 v1 w0 + c02 c21 v2 w0 - c01 c22 v2 w0 - 
+//  c02 c10 u0 w1 + c00 c12 u0 w1 + c12 c20 u2 w1 - c10 c22 u2 w1 - 
+//  c02 c11 v0 w1 + c01 c12 v0 w1 + c12 c21 v2 w1 - c11 c22 v2 w1 - 
+//  c02 c20 u0 w2 + c00 c22 u0 w2 - c12 c20 u1 w2 + c10 c22 u1 w2 - 
+//  c02 c21 v0 w2 + c01 c22 v0 w2 - c12 c21 v1 w2 + c11 c22 v1 w2
+
+// D = O*(Pu3 + Qv3 + Rw3 + S)
+// 	O = (c02 c11 c20 - c01 c12 c20 - c02 c10 c21 + c00 c12 c21 + c01 c10 c22 -
+//     c00 c11 c22)
+// 	P = (-v1 w0 + v2 w0 + v0 w1 - v2 w1 - v0 w2 + v1 w2)
+// 	Q = (u1 w0 - u2 w0 - u0 w1 + u2 w1 + u0 w2 - u1 w2)
+// 	R = (u1 w0 - u2 w0 - u0 w1 + u2 w1 + u0 w2 - u1 w2)
+// 	S = u2 v1 w0 - u1 v2 w0 - u2 v0 w1 + u0 v2 w1 + u1 v0 w2 - u0 v1 w2
+
+// }
+
 template<typename T>
 double 
 max_eb_to_keep_position_and_type_3d_online(const T u0, const T u1, const T u2, const T u3, const T v0, const T v1, const T v2, const T v3,
-	const T w0, const T w1, const T w2, const T w3, conditions& cond){
+	const T w0, const T w1, const T w2, const T w3, conditions_3d& cond){
 	//det = -u2 v1 w0 + u3 v1 w0 + u1 v2 w0 - u3 v2 w0 - u1 v3 w0 + u2 v3 w0 + 
 	//  u2 v0 w1 - u3 v0 w1 - u0 v2 w1 + u3 v2 w1 + u0 v3 w1 - u2 v3 w1 - 
 	//  u1 v0 w2 + u3 v0 w2 + u0 v1 w2 - u3 v1 w2 - u0 v3 w2 + u1 v3 w2 + 
@@ -73,6 +118,7 @@ max_eb_to_keep_position_and_type_3d_online(const T u0, const T u1, const T u2, c
 	double c_4 = u0*v1*w2 - u0*v2*w1 + u1*v2*w0 - u1*v0*w2 + u2*v0*w1 - u2*v1*w0;
 	if(flag[0] && flag[1] && flag[2] && flag[3]){
 		// cp found
+		// return 0;
 		double eb = 1;
 		double cur_eb = 0;
 		cur_eb = MIN(max_eb_to_keep_sign_3d_online(u3_0, v3_0, w3_0), 
@@ -381,7 +427,7 @@ sz_compress_cp_preserve_3d_online_log(const T * U, const T * V, const T * W, siz
 	// int outrange_pos = 0;
 	// unpred_vec<float> outrange_data = unpred_vec<float>();
 	// record flags
-	conditions * conds = (conditions *) malloc(6*num_elements * sizeof(conditions));
+	conditions_3d * conds = (conditions_3d *) malloc(6*num_elements * sizeof(conditions_3d));
 	for(int i=0; i<6*num_elements; i++) conds[i].computed = false;
 	for(int i=0; i<r1; i++){
 		// printf("start %d row\n", i);
@@ -493,6 +539,7 @@ sz_compress_cp_preserve_3d_online_log(const T * U, const T * V, const T * W, siz
 		}
 	}
 	// if(outrange_pos) outrange_residue_pos ++;
+	free(conds);
 	free(log_U);
 	free(log_V);
 	free(log_W);

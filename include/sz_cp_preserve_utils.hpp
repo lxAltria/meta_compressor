@@ -27,6 +27,38 @@ inline int eb_linear_quantize(double& eb, double threshold=1e-5){
 	return id;
 }
 
+// maximal error bound to keep the sign of postive*(1+e)^d - negative*(1-e)^d
+template<typename T>
+inline double max_eb_to_keep_sign(const T positive, const T negative, int degree){
+  if((negative < 0) || (positive < 0)){
+    printf("%.4f, %.4f\n", negative, positive);
+    exit(0);
+  }
+  if((negative == 0) || (positive == 0)){
+    return 1;
+  }
+  // double c = fabs(positive - negative) / (positive + negative);
+  double P = 0, N = 0;
+  switch(degree){
+    case 1:
+    	P = positive;
+    	N = negative;
+		break;
+    case 2:
+    	P = sqrt(positive);
+    	N = sqrt(negative);
+    	break;
+    case 3:
+    	P = cbrt(positive);
+    	N = cbrt(negative);
+    	break;
+    default:
+		printf("Degree higher than 3 not supported yet\n");
+		exit(0);
+  }
+  return fabs(P - N)/(P + N);
+}
+
 template<typename T>
 inline void accumulate(const T value, double& positive, double& negative){
 	if(value >= 0) positive += value;

@@ -4,38 +4,6 @@
 #include "sz_def.hpp"
 #include "sz_compression_utils.hpp"
 
-// maximal error bound to keep the sign of postive*(1+e)^d - negative*(1-e)^d
-template<typename T>
-inline double max_eb_to_keep_sign(const T positive, const T negative, int degree){
-  if((negative < 0) || (positive < 0)){
-    printf("%.4f, %.4f\n", negative, positive);
-    exit(0);
-  }
-  if((negative == 0) || (positive == 0)){
-    return 1;
-  }
-  // double c = fabs(positive - negative) / (positive + negative);
-  double P = 0, N = 0;
-  switch(degree){
-    case 1:
-    	P = positive;
-    	N = negative;
-		break;
-    case 2:
-    	P = sqrt(positive);
-    	N = sqrt(negative);
-    	break;
-    case 3:
-    	P = cbrt(positive);
-    	N = cbrt(negative);
-    	break;
-    default:
-		printf("Degree higher than 3 not supported yet\n");
-		exit(0);
-  }
-  return fabs(P - N)/(P + N);
-}
-
 // maximal error bound to keep the sign of u0v1 - u0v2 + u1v2 - u1v0 + u2v0 - u2v1
 template<typename T>
 inline double max_eb_to_keep_sign_det2x2(const T u0, const T u1, const T u2, const T v0, const T v1, const T v2){
@@ -465,14 +433,26 @@ inline double max_eb_to_keep_type_online(const T u0, const T u1, const T u2, con
 		}
 		else{
 			// (|A| + |B|)^2*e^2 + (|2AC' - 4D| + |2BC' - 4E|)*e + delta < 0
-			double a = (fabs(A) + fabs(B))*(fabs(A) + fabs(B));
-			double b = fabs(2*A*C - 4*D) + fabs(2*B*C - 4*E);
+			// double a = (fabs(A) + fabs(B))*(fabs(A) + fabs(B));
+			// double b = fabs(2*A*C - 4*D) + fabs(2*B*C - 4*E);
+			// double c = delta;
+			// if(b*b - 4*a*c < 0){
+			// 	printf("impossible as a*c is always less than 0\n");
+			// 	exit(0);
+			// }
+			// eb = MIN(eb, (-b + sqrt(b*b - 4*a*c))/(2*a));
+
+			// check four corners
+			double e1[2] = {-1, 1};
+			double e2[2] = {-1, 1};
 			double c = delta;
-			if(b*b - 4*a*c < 0){
-				printf("impossible as a*c is always less than 0\n");
-				exit(0);
+			for(int i=0; i<2; i++){
+				for(int j=0; j<2; j++){
+					double a = (e1[i] * A + e2[j] * B) * (e1[i] * A + e2[j] * B);
+					double b = (2*A*C - 4*D) * e1[i] + (2*B*C - 4*E) * e2[j];
+					eb = MIN(eb, (-b + sqrt(b*b - 4*a*c))/(2*a));
+				}
 			}
-			eb = MIN(eb, (-b + sqrt(b*b - 4*a*c))/(2*a));
 		}
 	}
 	return eb;

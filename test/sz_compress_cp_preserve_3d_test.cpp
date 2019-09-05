@@ -23,6 +23,7 @@ int main(int argc, char ** argv){
     int err = 0;
     err = clock_gettime(CLOCK_REALTIME, &start);
     cout << "start Compression\n";
+    // unsigned char * result =  sz_compress_cp_preserve_3d_offline_log(U, V, W, r1, r2, r3, result_size, false, max_eb);
     unsigned char * result =  sz_compress_cp_preserve_3d_online_log(U, V, W, r1, r2, r3, result_size, false, max_eb);
     // exit(0);
     unsigned char * result_after_lossless = NULL;

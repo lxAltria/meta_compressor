@@ -24,7 +24,7 @@ int main(int argc, char ** argv){
     int r1 = atoi(argv[3]);
     int r2 = atoi(argv[4]);
     double max_eb = atof(argv[5]);
-    cout << U[r2 + 3] << " " << U[3*r2 + 1] << endl;
+    // cout << U[r2 + 3] << " " << U[3*r2 + 1] << endl;
     transpose_2d(U, r1, r2);
     cout << U[r2 + 3] << " " << U[3*r2 + 1] << endl;
     transpose_2d(V, r1, r2);

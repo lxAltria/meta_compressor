@@ -892,7 +892,8 @@ sz_compress_cp_preserve_3d_online_log(const T * U, const T * V, const T * W, siz
 				for(int n=0; n<24; n++){
 					bool in_mesh = true;
 					for(int p=0; p<3; p++){
-						if(!(in_range(i + index_offset[n][p][0], (int)r1) && in_range(j + index_offset[n][p][1], (int)r2) && in_range(k + index_offset[n][p][2], (int)r3))){
+						// reversed order!
+						if(!(in_range(i + index_offset[n][p][2], (int)r1) && in_range(j + index_offset[n][p][1], (int)r2) && in_range(k + index_offset[n][p][0], (int)r3))){
 							in_mesh = false;
 							break;
 						}
@@ -906,7 +907,7 @@ sz_compress_cp_preserve_3d_online_log(const T * U, const T * V, const T * W, siz
 							conds[index]));
 					}
 				}
-				if(required_eb < 1e-10) required_eb = 0;
+				if(required_eb < 1e-6) required_eb = 0;
 				if(required_eb > 0){
 					bool unpred_flag = false;
 					T decompressed[3];
@@ -1026,11 +1027,15 @@ sz_compress_cp_preserve_3d_online_log(const T * U, const T * V, const T * W, siz
 	// free(outrange_exp);
 	// free(outrange_residue);
 	tmp = compressed_pos;
+	size_t eb_quant_num = eb_quant_index_pos - eb_quant_index;
+	write_variable_to_dst(compressed_pos, eb_quant_num);
 	Huffman_encode_tree_and_data(2*256, eb_quant_index, num_elements, compressed_pos);
 	printf("eb_quant_index size = %ld\n", compressed_pos - tmp);
 	free(eb_quant_index);
 	tmp = compressed_pos;
-	Huffman_encode_tree_and_data(2*capacity, data_quant_index, data_quant_index_pos - data_quant_index, compressed_pos);
+	size_t data_quant_num = data_quant_index_pos - data_quant_index;
+	write_variable_to_dst(compressed_pos, data_quant_num);
+	Huffman_encode_tree_and_data(2*capacity, data_quant_index, data_quant_num, compressed_pos);
 	printf("data_quant_index size = %ld\n", compressed_pos - tmp);
 	free(data_quant_index);
 	compressed_size = compressed_pos - compressed;

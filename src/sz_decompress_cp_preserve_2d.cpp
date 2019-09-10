@@ -83,10 +83,6 @@ sz_decompress_cp_preserve_2d_offline_log(const unsigned char * compressed, size_
 	for(int i=0; i<num_elements; i++){
 		if(U[i] < -99) U[i] = 0;
 		else U[i] = sign_map_u[i] ? exp2(U[i]) : -exp2(U[i]);
-		if(U[i]>1e-4){
-			printf("%d, %.4g, eb = %.4g\n", i, U[i], eb[i]);
-			exit(0);
-		}
 	}
 	V = sz_decompress_2d_with_eb<T>(compressed_pos, eb, r1, r2);
 	for(int i=0; i<num_elements; i++){
@@ -209,8 +205,8 @@ sz_decompress_cp_preserve_2d_online_log(const unsigned char * compressed, size_t
 				unpred_data_indices.insert(i*r2 + j);
 				T data_U = *(unpred_data_pos ++);
 				T data_V = *(unpred_data_pos ++);
-				*U_pos = (data_U == 0) ? -100 : log2(fabs(data_U));
-				*V_pos = (data_V == 0) ? -100 : log2(fabs(data_V));
+				*U_pos = (data_U == 0) ? -100 : log2f(fabs(data_U));
+				*V_pos = (data_V == 0) ? -100 : log2f(fabs(data_V));
 				eb_quant_index_pos ++;
 			}
 			else{

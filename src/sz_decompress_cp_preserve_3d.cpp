@@ -27,8 +27,12 @@ sz_decompress_cp_preserve_3d_online_log(const unsigned char * compressed, size_t
 	const T * eb_zero_data = (T *) compressed_pos;
 	const T * eb_zero_data_pos = eb_zero_data;
 	compressed_pos += unpred_data_count*sizeof(T);
-	int * eb_quant_index = Huffman_decode_tree_and_data(2*256, num_elements, compressed_pos);
-	int * data_quant_index = Huffman_decode_tree_and_data(2*capacity, 3*num_elements, compressed_pos);
+	size_t eb_quant_num = 0;
+	read_variable_from_src(compressed_pos, eb_quant_num);
+	int * eb_quant_index = Huffman_decode_tree_and_data(2*256, eb_quant_num, compressed_pos);
+	size_t data_quant_num = 0;
+	read_variable_from_src(compressed_pos, data_quant_num);
+	int * data_quant_index = Huffman_decode_tree_and_data(2*capacity, data_quant_num, compressed_pos);
 	U = (T *) malloc(num_elements*sizeof(T));
 	V = (T *) malloc(num_elements*sizeof(T));
 	W = (T *) malloc(num_elements*sizeof(T));
@@ -54,7 +58,7 @@ sz_decompress_cp_preserve_3d_online_log(const unsigned char * compressed, size_t
 					unpred_data_indices.insert(index);
 					for(int p=0; p<3; p++){
 						T cur_data = *(eb_zero_data_pos ++);
-						*(data_pos[p]) = (cur_data == 0) ? -100 : log2(fabs(cur_data));
+						*(data_pos[p]) = (cur_data == 0) ? -100 : log2f(fabs(cur_data));
 					}
 					eb_quant_index_pos ++;
 				}

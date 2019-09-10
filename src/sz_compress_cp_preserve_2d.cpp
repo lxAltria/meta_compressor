@@ -186,9 +186,10 @@ sz_compress_cp_preserve_2d_offline(const T * U, const T * V, size_t r1, size_t r
 			for(int k=0; k<2; k++){
 				auto X = (k == 0) ? X_upper : X_lower;
 				auto offset = (k == 0) ? offset_upper : offset_lower;
+				// reversed order!
 				double max_cur_eb = max_eb_to_keep_position_and_type(U_row_pos[offset[0]], U_row_pos[offset[1]], U_row_pos[offset[2]],
-					V_row_pos[offset[0]], V_row_pos[offset[1]], V_row_pos[offset[2]], X[0][0], X[1][0], X[2][0],
-					X[0][1], X[1][1], X[2][1]);
+					V_row_pos[offset[0]], V_row_pos[offset[1]], V_row_pos[offset[2]], X[0][1], X[1][1], X[2][1],
+					X[0][0], X[1][0], X[2][0]);
 				eb_row_pos[offset[0]] = MIN(eb_row_pos[offset[0]], max_cur_eb);
 				eb_row_pos[offset[1]] = MIN(eb_row_pos[offset[1]], max_cur_eb);
 				eb_row_pos[offset[2]] = MIN(eb_row_pos[offset[2]], max_cur_eb);
@@ -283,9 +284,10 @@ sz_compress_cp_preserve_2d_offline_log(const T * U, const T * V, size_t r1, size
 			for(int k=0; k<2; k++){
 				auto X = (k == 0) ? X_upper : X_lower;
 				auto offset = (k == 0) ? offset_upper : offset_lower;
+				// reversed order!
 				double max_cur_eb = max_eb_to_keep_position_and_type(U_row_pos[offset[0]], U_row_pos[offset[1]], U_row_pos[offset[2]],
-					V_row_pos[offset[0]], V_row_pos[offset[1]], V_row_pos[offset[2]], X[0][0], X[1][0], X[2][0],
-					X[0][1], X[1][1], X[2][1]);
+					V_row_pos[offset[0]], V_row_pos[offset[1]], V_row_pos[offset[2]], X[0][1], X[1][1], X[2][1],
+					X[0][0], X[1][0], X[2][0]);
 				eb_row_pos[offset[0]] = MIN(eb_row_pos[offset[0]], max_cur_eb);
 				eb_row_pos[offset[1]] = MIN(eb_row_pos[offset[1]], max_cur_eb);
 				eb_row_pos[offset[2]] = MIN(eb_row_pos[offset[2]], max_cur_eb);
@@ -555,14 +557,6 @@ sz_compress_cp_preserve_2d_online(const T * U, const T * V, size_t r1, size_t r2
 		-(int)r2, -(int)r2 - 1, -1, (int)r2, (int)r2+1, 1, -(int)r2
 	};
 	const T x[6][3] = {
-		{0, 0, 1},
-		{0, 1, 1},
-		{0, 1, 0},
-		{1, 1, 0},
-		{1, 0, 0},
-		{1, 0, 1}
-	};
-	const T y[6][3] = {
 		{1, 0, 1},
 		{0, 0, 1},
 		{0, 1, 1},
@@ -570,9 +564,24 @@ sz_compress_cp_preserve_2d_online(const T * U, const T * V, size_t r1, size_t r2
 		{1, 1, 0},
 		{1, 0, 0}
 	};
+	const T y[6][3] = {
+		{0, 0, 1},
+		{0, 1, 1},
+		{0, 1, 0},
+		{1, 1, 0},
+		{1, 0, 0},
+		{1, 0, 1}
+	};
 	T inv_C[6][4];
 	for(int i=0; i<6; i++){
 		get_adjugate_matrix_for_position(x[i][0], x[i][1], x[i][2], y[i][0], y[i][1], y[i][2], inv_C[i]);
+	}
+	int index_offset[6][2][2];
+	for(int i=0; i<6; i++){
+		for(int j=0; j<2; j++){
+			index_offset[i][j][0] = x[i][j] - x[i][2];
+			index_offset[i][j][1] = y[i][j] - y[i][2];
+		}
 	}
 	double threshold = std::numeric_limits<double>::epsilon();
 	// conditions_2d cond;
@@ -584,7 +593,15 @@ sz_compress_cp_preserve_2d_online(const T * U, const T * V, size_t r1, size_t r2
 			double required_eb = max_pwr_eb;
 			// derive eb given six adjacent triangles
 			for(int k=0; k<6; k++){
-				if(inbound(i*(int)r2 + j + offsets[k], 0, (int)num_elements) && inbound(i*(int)r2 + j + offsets[k+1], 0, (int)num_elements)){
+				bool in_mesh = true;
+				for(int p=0; p<2; p++){
+					// reserved order!
+					if(!(in_range(i + index_offset[k][p][1], (int)r1) && in_range(j + index_offset[k][p][0], (int)r2))){
+						in_mesh = false;
+						break;
+					}
+				}
+				if(in_mesh){
 					required_eb = MIN(required_eb, derive_cp_eb_for_positions_online(cur_U_pos[offsets[k]], cur_U_pos[offsets[k+1]], cur_U_pos[0],
 						cur_V_pos[offsets[k]], cur_V_pos[offsets[k+1]], cur_V_pos[0], inv_C[k]));
 				}
@@ -730,20 +747,20 @@ sz_compress_cp_preserve_2d_online_log(const T * U, const T * V, size_t r1, size_
 		-(int)r2, -(int)r2 - 1, -1, (int)r2, (int)r2+1, 1, -(int)r2
 	};
 	const T x[6][3] = {
-		{0, 0, 1},
-		{0, 1, 1},
-		{0, 1, 0},
-		{1, 1, 0},
-		{1, 0, 0},
-		{1, 0, 1}
-	};
-	const T y[6][3] = {
 		{1, 0, 1},
 		{0, 0, 1},
 		{0, 1, 1},
 		{0, 1, 0},
 		{1, 1, 0},
 		{1, 0, 0}
+	};
+	const T y[6][3] = {
+		{0, 0, 1},
+		{0, 1, 1},
+		{0, 1, 0},
+		{1, 1, 0},
+		{1, 0, 0},
+		{1, 0, 1}
 	};
 	T inv_C[6][4];
 	for(int i=0; i<6; i++){
@@ -782,7 +799,8 @@ sz_compress_cp_preserve_2d_online_log(const T * U, const T * V, size_t r1, size_
 			for(int k=0; k<6; k++){
 				bool in_mesh = true;
 				for(int p=0; p<2; p++){
-					if(!(in_range(i + index_offset[k][p][0], (int)r1) && in_range(j + index_offset[k][p][1], (int)r2))){
+					// reserved order!
+					if(!(in_range(i + index_offset[k][p][1], (int)r1) && in_range(j + index_offset[k][p][0], (int)r2))){
 						in_mesh = false;
 						break;
 					}

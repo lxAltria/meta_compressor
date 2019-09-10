@@ -25,7 +25,7 @@ int main(int argc, char ** argv){
     size_t lossless_outsize = sz_lossless_compress(ZSTD_COMPRESSOR, 3, result, result_size, &result_after_lossless);
     err = clock_gettime(CLOCK_REALTIME, &end);
     cout << "Compression time: " << (double)(end.tv_sec - start.tv_sec) + (double)(end.tv_nsec - start.tv_nsec)/(double)1000000000 << "s" << endl;
-    cout << "Compressed size = " << lossless_outsize << ", ratio = " << (2*num_elements*sizeof(double)) * 1.0/lossless_outsize << endl;
+    cout << "Compressed size = " << lossless_outsize << ", ratio = " << (2*num_elements*sizeof(float)) * 1.0/lossless_outsize << endl;
     free(result);
     // exit(0);
     err = clock_gettime(CLOCK_REALTIME, &start);

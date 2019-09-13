@@ -67,17 +67,37 @@ inline void accumulate(const T value, double& positive, double& negative){
 
 template<typename T>
 T *
-log_transform(const T * data, unsigned char * sign, size_t n){
+log_transform(const T * data, unsigned char * sign, size_t n, bool verbose=false){
+	T * log_data = (T *) malloc(n*sizeof(T));
+	for(int i=0; i<n; i++){
+		sign[i] = 0;
+		if(data[i] != 0){
+			sign[i] = (data[i] > 0);
+			log_data[i] = (data[i] > 0) ? log2f(data[i]) : log2f(-data[i]); 
+		}
+		else{
+			sign[i] = 0;
+			log_data[i] = -100; //TODO???
+		}
+	}
+	return log_data;
+}
+
+template<typename T>
+T *
+log_transform(const T * data, unsigned char * sign, unsigned char * zero, size_t n){
 	T * log_data = (T *) malloc(n*sizeof(T));
 	for(int i=0; i<n; i++){
 		sign[i] = 0;
 		if(data[i] != 0){
 			sign[i] = (data[i] > 0);
 			log_data[i] = (data[i] > 0) ? log2(data[i]) : log2(-data[i]); 
+			zero[i] = 0;
 		}
 		else{
 			sign[i] = 0;
 			log_data[i] = -100; //TODO???
+			zero[i] = 1;
 		}
 	}
 	return log_data;

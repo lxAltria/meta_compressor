@@ -415,7 +415,7 @@ sz_compress_cp_preserve_3d_offline_log(const T * U, const T * V, const T * W, si
 	free(decompressed_V);
 	free(decompressed_W);
 	printf("offset eb_q, data_q, unpred: %ld %ld %ld\n", eb_quant_index_pos - eb_quant_index, data_quant_index_pos - data_quant_index, eb_zero_data.size());
-	unsigned char * compressed = (unsigned char *) malloc(2*num_elements*sizeof(T));
+	unsigned char * compressed = (unsigned char *) malloc(3*num_elements*sizeof(T));
 	unsigned char * compressed_pos = compressed;
 	write_variable_to_dst(compressed_pos, base);
 	write_variable_to_dst(compressed_pos, intv_radius);
@@ -525,7 +525,7 @@ inline double max_eb_to_keep_sign_3d_online(const T A, const T B, const T C, con
 template<typename T>
 double 
 max_eb_to_keep_position_and_type_3d_online(const T u0, const T u1, const T u2, const T u3, const T v0, const T v1, const T v2, const T v3,
-	const T w0, const T w1, const T w2, const T w3, conditions_3d& cond){
+	const T w0, const T w1, const T w2, const T w3){
 	//det = -u2 v1 w0 + u3 v1 w0 + u1 v2 w0 - u3 v2 w0 - u1 v3 w0 + u2 v3 w0 + 
 	//  u2 v0 w1 - u3 v0 w1 - u0 v2 w1 + u3 v2 w1 + u0 v3 w1 - u2 v3 w1 - 
 	//  u1 v0 w2 + u3 v0 w2 + u0 v1 w2 - u3 v1 w2 - u0 v3 w2 + u1 v3 w2 + 
@@ -867,7 +867,6 @@ sz_compress_cp_preserve_3d_online_log(const T * U, const T * V, const T * W, siz
 	T * cur_W_pos = decompressed_W;
 	unpred_vec<T> eb_zero_data = unpred_vec<T>();
 	ptrdiff_t max_pointer_pos = num_elements;
-	std::unordered_map<int, vector<bool>> flags;
 	double threshold = std::numeric_limits<float>::epsilon();
 	int eb_quant_index_max = (int) (log2(1.0 / threshold)/log_of_base) + 1;
 
@@ -881,8 +880,6 @@ sz_compress_cp_preserve_3d_online_log(const T * U, const T * V, const T * W, siz
 	// int outrange_pos = 0;
 	// unpred_vec<float> outrange_data = unpred_vec<float>();
 	// record flags
-	conditions_3d * conds = (conditions_3d *) malloc(6*num_elements * sizeof(conditions_3d));
-	for(int i=0; i<6*num_elements; i++) conds[i].computed = false;
 	for(int i=0; i<r1; i++){
 		// printf("start %d row\n", i);
 		for(int j=0; j<r2; j++){
@@ -903,8 +900,7 @@ sz_compress_cp_preserve_3d_online_log(const T * U, const T * V, const T * W, siz
 						required_eb = MIN(required_eb, max_eb_to_keep_position_and_type_3d_online(
 							cur_U_pos[offset[n][0]], cur_U_pos[offset[n][1]], cur_U_pos[offset[n][2]], *cur_U_pos,
 							cur_V_pos[offset[n][0]], cur_V_pos[offset[n][1]], cur_V_pos[offset[n][2]], *cur_V_pos,
-							cur_W_pos[offset[n][0]], cur_W_pos[offset[n][1]], cur_W_pos[offset[n][2]], *cur_W_pos,
-							conds[index]));
+							cur_W_pos[offset[n][0]], cur_W_pos[offset[n][1]], cur_W_pos[offset[n][2]], *cur_W_pos));
 					}
 				}
 				if(required_eb < 1e-6) required_eb = 0;
@@ -994,7 +990,6 @@ sz_compress_cp_preserve_3d_online_log(const T * U, const T * V, const T * W, siz
 		}
 	}
 	// if(outrange_pos) outrange_residue_pos ++;
-	free(conds);
 	free(log_U);
 	free(log_V);
 	free(log_W);
@@ -1002,7 +997,7 @@ sz_compress_cp_preserve_3d_online_log(const T * U, const T * V, const T * W, siz
 	free(decompressed_V);
 	free(decompressed_W);
 	printf("offset eb_q, data_q, unpred: %ld %ld %ld\n", eb_quant_index_pos - eb_quant_index, data_quant_index_pos - data_quant_index, eb_zero_data.size());
-	unsigned char * compressed = (unsigned char *) malloc(2*num_elements*sizeof(T));
+	unsigned char * compressed = (unsigned char *) malloc(3*num_elements*sizeof(T));
 	unsigned char * compressed_pos = compressed;
 	write_variable_to_dst(compressed_pos, base);
 	write_variable_to_dst(compressed_pos, intv_radius);
@@ -1049,3 +1044,181 @@ sz_compress_cp_preserve_3d_online_log(const float * U, const float * V, const fl
 template
 unsigned char *
 sz_compress_cp_preserve_3d_online_log(const double * U, const double * V, const double * W, size_t r1, size_t r2, size_t r3, size_t& compressed_size, bool transpose, double max_pwr_eb);
+
+
+typedef struct Tet{
+	int vertex[4];
+}Tet;
+
+template<typename T>
+std::vector<Tet> construct_tets(int n, const T * data, int m, const int * tets_ind, std::vector<std::vector<std::pair<int, int>>>& point_tets){
+	std::vector<Tet> tets;
+	point_tets.clear();
+	for(int i=0; i<n; i++){
+		point_tets.push_back(std::vector<std::pair<int, int>>());
+	}
+	const int * tets_ind_pos = tets_ind;
+	for(int i=0; i<m; i++){
+		Tet t;
+		for(int j=0; j<4; j++){
+			int ind = *(tets_ind_pos ++);
+			t.vertex[j] = ind;
+			point_tets[ind].push_back(make_pair(i, j));
+		}
+		tets.push_back(t);
+	}
+	return tets;
+}
+
+template<typename T>
+unsigned char *
+sz_compress_cp_preserve_3d_unstructured(int n, const T * points, const T * data, int m, const int * tets_ind, size_t& compressed_size, double max_pwr_eb){
+	// map point to adjcent tets and position in that tets
+	std::vector<std::vector<std::pair<int, int>>> point_tets;
+	size_t sign_map_size = (3*n - 1)/8 + 1;
+	unsigned char * sign_map = (unsigned char *) malloc(3*n*sizeof(unsigned char));
+	T * log_data = log_transform(data, sign_map, 3*n);
+	std::vector<Tet> tets = construct_tets(n, data, m, tets_ind, point_tets);
+	unsigned char * sign_map_compressed = (unsigned char *) malloc(sign_map_size);
+	unsigned char * sign_map_compressed_pos = sign_map_compressed;
+	convertIntArray2ByteArray_fast_1b_to_result_sz(sign_map, 3*n, sign_map_compressed_pos);
+	free(sign_map);
+
+	unpred_vec<T> eb_zero_data = unpred_vec<T>();
+	double threshold = std::numeric_limits<float>::epsilon();
+	const int base = 2;
+	const double log_of_base = log2(base);
+	const int capacity = 65536;
+	const int intv_radius = (capacity >> 1);
+	const int eb_quant_index_max = (int) (log2(1.0 / threshold)/log_of_base) + 1;
+	
+	T * dec_data = (T *) malloc(3*n*sizeof(T));
+	memcpy(dec_data, data, 3*n*sizeof(T));
+	T * dec_data_pos = dec_data;
+	T * log_data_pos = log_data;
+	int * eb_quant_index = (int *) malloc(n*sizeof(int));
+	int * data_quant_index = (int *) malloc(3*n*sizeof(int));
+	int * eb_quant_index_pos = eb_quant_index;
+	int * data_quant_index_pos = data_quant_index;
+	int count = 0;
+	for(int i=0; i<n; i++){
+		double required_eb = max_pwr_eb;
+		auto adj_tets_ids = point_tets[i];
+		for(const auto& id:adj_tets_ids){
+			auto t = tets[id.first];
+			int pos = id.second;
+			std::vector<int> inds{0, 1, 2, 3};
+			inds.erase(inds.begin() + pos);
+			const int data_offset[4] = {t.vertex[inds[0]]*3, t.vertex[inds[1]]*3, t.vertex[inds[2]]*3, t.vertex[pos]*3};
+			required_eb = MIN(required_eb, max_eb_to_keep_position_and_type_3d_online(
+				dec_data[data_offset[0]], dec_data[data_offset[1]], dec_data[data_offset[2]], dec_data[data_offset[3]],
+				dec_data[data_offset[0] + 1], dec_data[data_offset[1] + 1], dec_data[data_offset[2] + 1], dec_data[data_offset[3] + 1],
+				dec_data[data_offset[0] + 2], dec_data[data_offset[1] + 2], dec_data[data_offset[2] + 2], dec_data[data_offset[3] + 2]));
+		}
+		if(required_eb < 1e-6) required_eb = 0;
+		if(required_eb > 0){
+			bool unpred_flag = false;
+			double abs_eb = log2(1 + required_eb);
+			*eb_quant_index_pos = eb_exponential_quantize(abs_eb, base, log_of_base, threshold);
+			T decompressed[3];
+			if(*eb_quant_index_pos > 0){
+				// compress vector fields
+				for(int p=0; p<3; p++){
+					T * cur_log_data_pos = log_data_pos + p;
+					T cur_data = *cur_log_data_pos;
+					T pred = (i) ? cur_log_data_pos[-3] : 0;
+					double diff = cur_data - pred;
+					double quant_diff = fabs(diff) / abs_eb + 1;
+					if(quant_diff < capacity){
+						quant_diff = (diff > 0) ? quant_diff : -quant_diff;
+						int quant_index = (int)(quant_diff/2) + intv_radius;
+						data_quant_index_pos[p] = quant_index;
+						decompressed[p] = pred + 2 * (quant_index - intv_radius) * abs_eb; 
+						// check original data
+						if(fabs(decompressed[p] - cur_data) >= abs_eb){
+							unpred_flag = true;
+							break;
+						}
+					}
+					else{
+						unpred_flag = true;
+						break;
+					}
+				}
+			}
+			else unpred_flag = true;
+			if(unpred_flag){
+				*(eb_quant_index_pos ++) = 0;
+				eb_zero_data.push_back(dec_data_pos[0]);
+				eb_zero_data.push_back(dec_data_pos[1]);
+				eb_zero_data.push_back(dec_data_pos[2]);
+			}
+			else{
+				eb_quant_index_pos ++;
+				data_quant_index_pos += 3;
+				log_data_pos[0] = decompressed[0];
+				log_data_pos[1] = decompressed[1];
+				log_data_pos[2] = decompressed[2];
+				dec_data_pos[0] = (dec_data_pos[0] > 0) ? exp2(log_data_pos[0]) : -exp2(log_data_pos[0]);
+				dec_data_pos[1] = (dec_data_pos[1] > 0) ? exp2(log_data_pos[1]) : -exp2(log_data_pos[1]);
+				dec_data_pos[2] = (dec_data_pos[2] > 0) ? exp2(log_data_pos[2]) : -exp2(log_data_pos[2]);
+			}
+		}
+		else{
+			// record as unpredictable data
+			count ++;
+			*(eb_quant_index_pos ++) = 0;
+			eb_zero_data.push_back(dec_data_pos[0]);
+			eb_zero_data.push_back(dec_data_pos[1]);
+			eb_zero_data.push_back(dec_data_pos[2]);
+		}
+		log_data_pos += 3;
+		dec_data_pos += 3;
+	}
+	printf("eb 0 count = %d\n", count);
+	free(dec_data);
+	free(log_data);
+	printf("offset eb_q, data_q, unpred: %ld %ld %ld\n", eb_quant_index_pos - eb_quant_index, data_quant_index_pos - data_quant_index, eb_zero_data.size());
+	unsigned char * compressed = (unsigned char *) malloc(3*n*sizeof(T));
+	unsigned char * compressed_pos = compressed;
+	write_variable_to_dst(compressed_pos, base);
+	write_variable_to_dst(compressed_pos, intv_radius);
+	write_array_to_dst(compressed_pos, sign_map_compressed, sign_map_size);
+	free(sign_map_compressed);
+	size_t unpredictable_count = eb_zero_data.size();
+	write_variable_to_dst(compressed_pos, unpredictable_count);
+	write_array_to_dst(compressed_pos, (T *)&eb_zero_data[0], unpredictable_count);	
+	printf("eb_zero_data size = %ld\n", unpredictable_count*sizeof(T));
+	// store out range information
+	unsigned char * tmp = compressed_pos;
+	size_t eb_quant_num = eb_quant_index_pos - eb_quant_index;
+	write_variable_to_dst(compressed_pos, eb_quant_num);
+	Huffman_encode_tree_and_data(2*256, eb_quant_index, n, compressed_pos);
+	printf("eb_quant_index size = %ld\n", compressed_pos - tmp);
+	free(eb_quant_index);
+	tmp = compressed_pos;
+	size_t data_quant_num = data_quant_index_pos - data_quant_index;
+	write_variable_to_dst(compressed_pos, data_quant_num);
+	Huffman_encode_tree_and_data(2*capacity, data_quant_index, data_quant_num, compressed_pos);
+	printf("data_quant_index size = %ld\n", compressed_pos - tmp);
+	free(data_quant_index);
+	compressed_size = compressed_pos - compressed;
+	return compressed;	
+}
+
+template
+unsigned char *
+sz_compress_cp_preserve_3d_unstructured(int n, const float * points, const float * data, int m, const int * tets_ind, size_t& compressed_size, double max_pwr_eb);
+
+template
+unsigned char *
+sz_compress_cp_preserve_3d_unstructured(int n, const double * points, const double * data, int m, const int * tets_ind, size_t& compressed_size, double max_pwr_eb);
+
+
+
+
+
+
+
+
+

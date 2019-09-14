@@ -17,3 +17,8 @@ add_executable (sz_compress_cp_preserve_3d_test sz_compress_cp_preserve_3d_test.
 target_include_directories (sz_compress_cp_preserve_3d_test PRIVATE ${ZSTD_INCLUDES})
 target_include_directories (sz_compress_cp_preserve_3d_test PRIVATE ${PROJECT_SOURCE_DIR}/include)
 target_link_libraries (sz_compress_cp_preserve_3d_test sz_cpp)
+
+add_executable (sz_compress_cp_preserve_3d_unstructured_test sz_compress_cp_preserve_3d_unstructured_test.cpp)
+target_include_directories (sz_compress_cp_preserve_3d_unstructured_test PRIVATE ${ZSTD_INCLUDES})
+target_include_directories (sz_compress_cp_preserve_3d_unstructured_test PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries (sz_compress_cp_preserve_3d_unstructured_test sz_cpp)

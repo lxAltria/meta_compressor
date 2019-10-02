@@ -29,12 +29,14 @@ sz_decompress_cp_preserve_2d_offline(const unsigned char * compressed, size_t r1
 	for(int i=0; i<num_elements; i++){
 		if(type[i] == 0) eb[i] = 0;
 		else eb[i] = pow(base, type[i]) * threshold;
+		// else eb[i] = type[i] * 1e-2;
 	}
 	U = sz_decompress_2d_with_eb<T>(compressed_pos, eb, r1, r2);
 	compressed_pos += compressed_u_size;
 	for(int i=0; i<num_elements; i++){
 		if(type[num_elements + i] == 0) eb[i] = 0;
 		else eb[i] = pow(base, type[num_elements + i]) * threshold;
+		// else eb[i] = type[num_elements + i] * 1e-2;
 	}
 	V = sz_decompress_2d_with_eb<T>(compressed_pos, eb, r1, r2);
 	free(eb);
@@ -57,7 +59,7 @@ sz_decompress_cp_preserve_2d_offline_log(const unsigned char * compressed, size_
 	const unsigned char * compressed_pos = compressed;
 	int base = 0;
 	read_variable_from_src(compressed_pos, base);
-	printf("base = %d\n", base);
+	// printf("base = %d\n", base);
 	double threshold = 0;
 	read_variable_from_src(compressed_pos, threshold);
 	size_t compressed_eb_size = 0;
@@ -66,18 +68,19 @@ sz_decompress_cp_preserve_2d_offline_log(const unsigned char * compressed, size_
 	read_variable_from_src(compressed_pos, compressed_u_size);
 	size_t compressed_v_size = 0;
 	read_variable_from_src(compressed_pos, compressed_v_size);
-	printf("eb_size = %ld, u_size = %ld, v_size = %ld\n", compressed_eb_size, compressed_u_size, compressed_v_size);
+	// printf("eb_size = %ld, u_size = %ld, v_size = %ld\n", compressed_eb_size, compressed_u_size, compressed_v_size);
 	int * type = Huffman_decode_tree_and_data(2*1024, num_elements, compressed_pos);
 	double * eb = (double *) malloc(num_elements*sizeof(double));
 	// const double threshold=std::numeric_limits<float>::epsilon();
 	for(int i=0; i<num_elements; i++){
 		if(type[i] == 0) eb[i] = 0;
 		else eb[i] = pow(base, type[i]) * threshold;
+		// else eb[i] = type[i] * 5e-3;
 	}
 	size_t sign_map_size = (num_elements - 1)/8 + 1;
 	unsigned char * sign_map_u = convertByteArray2IntArray_fast_1b_sz(num_elements, compressed_pos, sign_map_size);	
 	unsigned char * sign_map_v = convertByteArray2IntArray_fast_1b_sz(num_elements, compressed_pos, sign_map_size);	
-	printf("before data: %ld\n", compressed_pos - compressed);
+	// printf("before data: %ld\n", compressed_pos - compressed);
 	U = sz_decompress_2d_with_eb<T>(compressed_pos, eb, r1, r2);
 	compressed_pos += compressed_u_size;
 	for(int i=0; i<num_elements; i++){
@@ -143,6 +146,7 @@ sz_decompress_cp_preserve_2d_online(const unsigned char * compressed, size_t r1,
 				for(int k=0; k<2; k++){
 					T * cur_data_pos = (k == 0) ? U_pos : V_pos;					
 					double eb = pow(base, *eb_quant_index_pos ++) * threshold;
+					// double eb = *(eb_quant_index_pos ++) * 1e-3;
 					T d0 = (i && j) ? cur_data_pos[-1 - r2] : 0;
 					T d1 = (i) ? cur_data_pos[-r2] : 0;
 					T d2 = (j) ? cur_data_pos[-1] : 0;
@@ -176,7 +180,7 @@ sz_decompress_cp_preserve_2d_online_log(const unsigned char * compressed, size_t
 	const unsigned char * compressed_pos = compressed;
 	int base = 0;
 	read_variable_from_src(compressed_pos, base);
-	printf("base = %d\n", base);
+	// printf("base = %d\n", base);
 	int intv_radius = 0;
 	read_variable_from_src(compressed_pos, intv_radius);
 	size_t sign_map_size = (num_elements - 1)/8 + 1;
@@ -211,6 +215,7 @@ sz_decompress_cp_preserve_2d_online_log(const unsigned char * compressed, size_t
 			}
 			else{
 				double eb = (*eb_quant_index_pos == 0) ? 0 : pow(base, *eb_quant_index_pos) * threshold;
+				// double eb = (*eb_quant_index_pos == 0) ? 0 : *eb_quant_index_pos * 1e-2;
 				eb_quant_index_pos ++;
 				for(int k=0; k<2; k++){
 					T * cur_data_pos = (k == 0) ? U_pos : V_pos;					

@@ -17,8 +17,8 @@ int main(int argc, char ** argv){
     int err = 0;
     err = clock_gettime(CLOCK_REALTIME, &start);
     cout << "start Compression\n";
-    // unsigned char * result = sz_compress_cp_preserve_2d_offline(U, V, r1, r2, result_size);
-    // unsigned char * result = sz_compress_cp_preserve_2d_offline_log(U, V, r1, r2, result_size);
+    // unsigned char * result = sz_compress_cp_preserve_2d_offline(U, V, r1, r2, result_size, false, max_eb);
+    // unsigned char * result = sz_compress_cp_preserve_2d_offline_log(U, V, r1, r2, result_size, false, max_eb);
     // unsigned char * result = sz_compress_cp_preserve_2d_online(U, V, r1, r2, result_size, false, max_eb);
     unsigned char * result = sz_compress_cp_preserve_2d_online_log(U, V, r1, r2, result_size, false, max_eb);
     unsigned char * result_after_lossless = NULL;

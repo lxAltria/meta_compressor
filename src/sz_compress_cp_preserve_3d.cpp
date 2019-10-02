@@ -5,6 +5,13 @@
 #include "sz_compression_utils.hpp"
 #include <unordered_map>
 
+template<typename Type>
+void writefile(const char * file, Type * data, size_t num_elements){
+	std::ofstream fout(file, std::ios::binary);
+	fout.write(reinterpret_cast<const char*>(&data[0]), num_elements*sizeof(Type));
+	fout.close();
+}
+
 template<typename T>
 inline double 
 max_eb_to_keep_position_and_type_3d_offline(const T u0, const T u1, const T u2, const T u3, const T v0, const T v1, const T v2, const T v3,
@@ -280,6 +287,8 @@ sz_compress_cp_preserve_3d_offline_log(const T * U, const T * V, const T * W, si
 			cur_U_pos += r3, cur_V_pos += r3, cur_W_pos += r3;
 		}
 	}
+	// writefile("eb_3d_offline.dat", eb_offline, num_elements);
+	// exit(0);
 	size_t sign_map_size = (num_elements - 1)/8 + 1;
 	unsigned char * sign_map_compressed = (unsigned char *) malloc(3*sign_map_size);
 	unsigned char * sign_map_compressed_pos = sign_map_compressed;
@@ -414,7 +423,7 @@ sz_compress_cp_preserve_3d_offline_log(const T * U, const T * V, const T * W, si
 	free(decompressed_U);
 	free(decompressed_V);
 	free(decompressed_W);
-	printf("offset eb_q, data_q, unpred: %ld %ld %ld\n", eb_quant_index_pos - eb_quant_index, data_quant_index_pos - data_quant_index, eb_zero_data.size());
+	// printf("offset eb_q, data_q, unpred: %ld %ld %ld\n", eb_quant_index_pos - eb_quant_index, data_quant_index_pos - data_quant_index, eb_zero_data.size());
 	unsigned char * compressed = (unsigned char *) malloc(3*num_elements*sizeof(T));
 	unsigned char * compressed_pos = compressed;
 	write_variable_to_dst(compressed_pos, base);
@@ -424,15 +433,19 @@ sz_compress_cp_preserve_3d_offline_log(const T * U, const T * V, const T * W, si
 	size_t unpredictable_count = eb_zero_data.size();
 	write_variable_to_dst(compressed_pos, unpredictable_count);
 	write_array_to_dst(compressed_pos, (T *)&eb_zero_data[0], unpredictable_count);	
-	printf("eb_zero_data size = %ld\n", unpredictable_count*sizeof(T));
+	// printf("eb_zero_data size = %ld\n", unpredictable_count*sizeof(T));
 	// store out range information
 	unsigned char * tmp = compressed_pos;
+	size_t eb_quant_num = eb_quant_index_pos - eb_quant_index;
+	write_variable_to_dst(compressed_pos, eb_quant_num);
 	Huffman_encode_tree_and_data(2*256, eb_quant_index, num_elements, compressed_pos);
-	printf("eb_quant_index size = %ld\n", compressed_pos - tmp);
+	// printf("eb_quant_index size = %ld\n", compressed_pos - tmp);
 	free(eb_quant_index);
 	tmp = compressed_pos;
-	Huffman_encode_tree_and_data(2*capacity, data_quant_index, data_quant_index_pos - data_quant_index, compressed_pos);
-	printf("data_quant_index size = %ld\n", compressed_pos - tmp);
+	size_t data_quant_num = data_quant_index_pos - data_quant_index;
+	write_variable_to_dst(compressed_pos, data_quant_num);
+	Huffman_encode_tree_and_data(2*capacity, data_quant_index, data_quant_num, compressed_pos);
+	// printf("data_quant_index size = %ld\n", compressed_pos - tmp);
 	free(data_quant_index);
 	compressed_size = compressed_pos - compressed;
 	return compressed;	
@@ -463,7 +476,7 @@ typedef struct conditions_3d{
 template<typename T>
 inline double max_eb_to_keep_sign_3d_online(const T A, const T B, const T C, const T D=0){
 	if((A == 0) && (B == 0) && (C == 0)) return 1;
-	return fabs(A + B + C + D) / (fabs(A) + fabs(B) + fabs(C) + fabs(D));
+	return fabs(A + B + C + D) / (fabs(A) + fabs(B) + fabs(C));
 }
 
 // template<typename T>
@@ -521,6 +534,16 @@ inline double max_eb_to_keep_sign_3d_online(const T A, const T B, const T C, con
 // 	S = u2 v1 w0 - u1 v2 w0 - u2 v0 w1 + u0 v2 w1 + u1 v0 w2 - u0 v1 w2
 
 // }
+template <typename T> int sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
+template <typename T> bool same_direction(T u0, T u1, T u2, T u3) {
+    int sgn0 = sgn(u0);
+    if(sgn0 == 0) return false;
+    if((sgn0 == sgn(u1)) && (sgn0 == sgn(u2)) && (sgn0 == sgn(u3))) return true;
+    return false;
+}
 
 template<typename T>
 double 
@@ -563,7 +586,11 @@ max_eb_to_keep_position_and_type_3d_online(const T u0, const T u1, const T u2, c
 	double M2 = u3_2 + v3_2 + w3_2;
 	double M3 = c_4;
 	double M = M0 + M1 + M2 + M3;
-	if(M == 0) return 0;
+	if(M == 0){
+		int sgn0 = sgn(M0);
+		if(same_direction(u0, u1, u2, u3) || same_direction(v0, v1, v2, v3) || same_direction(w0, w1, w2, w3)) return 1;
+		return 0;
+	}
 	bool flag[4];
 	flag[0] = (M0 == 0) || (M / M0 > 1);
 	flag[1] = (M1 == 0) || (M / M1 > 1);
@@ -574,17 +601,10 @@ max_eb_to_keep_position_and_type_3d_online(const T u0, const T u1, const T u2, c
 		return 0;
 		double eb = 1;
 		double cur_eb = 0;
-		cur_eb = MIN(max_eb_to_keep_sign_3d_online(u3_0, v3_0, w3_0), 
-				max_eb_to_keep_sign_3d_online(u3_1 + u3_2, v3_1 + v3_2, w3_1 + w3_2, c_4));
-		eb = MIN(eb, cur_eb);
-		cur_eb = MIN(max_eb_to_keep_sign_3d_online(u3_1, v3_1, w3_1), 
-				max_eb_to_keep_sign_3d_online(u3_0 + u3_2, v3_0 + v3_2, w3_0 + w3_2, c_4));
-		eb = MIN(eb, cur_eb);
-		cur_eb = MIN(max_eb_to_keep_sign_3d_online(u3_2, v3_2, w3_2), 
-				max_eb_to_keep_sign_3d_online(u3_0 + u3_1, v3_0 + v3_1, w3_0 + w3_1, c_4));
-		eb = MIN(eb, cur_eb);
-		cur_eb = max_eb_to_keep_sign_3d_online(u3_0 + u3_1 + u3_2, v3_0 + v3_1 + v3_2, w3_0 + w3_1 + w3_2);
-		eb = MIN(eb, cur_eb);
+		eb = MIN(eb, max_eb_to_keep_sign_3d_online(u3_0, v3_0, w3_0));
+		eb = MIN(eb, max_eb_to_keep_sign_3d_online(u3_1, v3_1, w3_1));
+		eb = MIN(eb, max_eb_to_keep_sign_3d_online(u3_2, v3_2, w3_2));
+		eb = MIN(eb, max_eb_to_keep_sign_3d_online(u3_0 + u3_1 + u3_2, v3_0 + v3_1 + v3_2, w3_0 + w3_1 + w3_2));
 		return eb;
 	}
 	else{
@@ -870,6 +890,8 @@ sz_compress_cp_preserve_3d_online_log(const T * U, const T * V, const T * W, siz
 	double threshold = std::numeric_limits<float>::epsilon();
 	int eb_quant_index_max = (int) (log2(1.0 / threshold)/log_of_base) + 1;
 
+	// double * eb = (double *) malloc(sizeof(double)*num_elements);
+	// int eb_index = 0;
 	// int est_outrange = num_elements * 0.1;
 	// unsigned char * outrange_sign = (unsigned char *) malloc(est_outrange);
 	// int * outrange_exp = (int *) malloc(est_outrange*sizeof(int));
@@ -903,6 +925,7 @@ sz_compress_cp_preserve_3d_online_log(const T * U, const T * V, const T * W, siz
 							cur_W_pos[offset[n][0]], cur_W_pos[offset[n][1]], cur_W_pos[offset[n][2]], *cur_W_pos));
 					}
 				}
+				// eb[eb_index ++] = required_eb;
 				if(required_eb < 1e-6) required_eb = 0;
 				if(required_eb > 0){
 					bool unpred_flag = false;
@@ -989,6 +1012,9 @@ sz_compress_cp_preserve_3d_online_log(const T * U, const T * V, const T * W, siz
 			}
 		}
 	}
+	// printf("%d %d\n", eb_index, num_elements);
+	// writefile("eb_3d.dat", eb, num_elements);
+	// free(eb);
 	// if(outrange_pos) outrange_residue_pos ++;
 	free(log_U);
 	free(log_V);
@@ -1115,7 +1141,7 @@ sz_compress_cp_preserve_3d_unstructured(int n, const T * points, const T * data,
 				dec_data[data_offset[0] + 1], dec_data[data_offset[1] + 1], dec_data[data_offset[2] + 1], dec_data[data_offset[3] + 1],
 				dec_data[data_offset[0] + 2], dec_data[data_offset[1] + 2], dec_data[data_offset[2] + 2], dec_data[data_offset[3] + 2]));
 		}
-		if(required_eb < 1e-6) required_eb = 0;
+		if(required_eb < 1e-10) required_eb = 0;
 		if(required_eb > 0){
 			bool unpred_flag = false;
 			double abs_eb = log2(1 + required_eb);
@@ -1175,34 +1201,36 @@ sz_compress_cp_preserve_3d_unstructured(int n, const T * points, const T * data,
 		log_data_pos += 3;
 		dec_data_pos += 3;
 	}
-	printf("eb 0 count = %d\n", count);
+	// printf("eb 0 count = %d\n", count);
 	free(dec_data);
 	free(log_data);
-	printf("offset eb_q, data_q, unpred: %ld %ld %ld\n", eb_quant_index_pos - eb_quant_index, data_quant_index_pos - data_quant_index, eb_zero_data.size());
+	// printf("offset eb_q, data_q, unpred: %ld %ld %ld\n", eb_quant_index_pos - eb_quant_index, data_quant_index_pos - data_quant_index, eb_zero_data.size());
 	unsigned char * compressed = (unsigned char *) malloc(3*n*sizeof(T));
 	unsigned char * compressed_pos = compressed;
 	write_variable_to_dst(compressed_pos, base);
 	write_variable_to_dst(compressed_pos, intv_radius);
 	write_array_to_dst(compressed_pos, sign_map_compressed, sign_map_size);
 	free(sign_map_compressed);
+	// printf("sign map size = %ld\n", sign_map_size);
 	size_t unpredictable_count = eb_zero_data.size();
 	write_variable_to_dst(compressed_pos, unpredictable_count);
 	write_array_to_dst(compressed_pos, (T *)&eb_zero_data[0], unpredictable_count);	
-	printf("eb_zero_data size = %ld\n", unpredictable_count*sizeof(T));
+	// printf("eb_zero_data size = %ld\n", unpredictable_count*sizeof(T));
 	// store out range information
 	unsigned char * tmp = compressed_pos;
 	size_t eb_quant_num = eb_quant_index_pos - eb_quant_index;
 	write_variable_to_dst(compressed_pos, eb_quant_num);
 	Huffman_encode_tree_and_data(2*256, eb_quant_index, n, compressed_pos);
-	printf("eb_quant_index size = %ld\n", compressed_pos - tmp);
+	// printf("eb_quant_index size = %ld\n", compressed_pos - tmp);
 	free(eb_quant_index);
 	tmp = compressed_pos;
 	size_t data_quant_num = data_quant_index_pos - data_quant_index;
 	write_variable_to_dst(compressed_pos, data_quant_num);
 	Huffman_encode_tree_and_data(2*capacity, data_quant_index, data_quant_num, compressed_pos);
-	printf("data_quant_index size = %ld\n", compressed_pos - tmp);
+	// printf("data_quant_index size = %ld\n", compressed_pos - tmp);
 	free(data_quant_index);
 	compressed_size = compressed_pos - compressed;
+	// printf("size = %ld\n", compressed_size);
 	return compressed;	
 }
 

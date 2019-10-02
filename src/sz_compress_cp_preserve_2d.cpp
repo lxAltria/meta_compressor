@@ -4,6 +4,13 @@
 #include "sz_def.hpp"
 #include "sz_compression_utils.hpp"
 
+template<typename Type>
+void writefile(const char * file, Type * data, size_t num_elements){
+	std::ofstream fout(file, std::ios::binary);
+	fout.write(reinterpret_cast<const char*>(&data[0]), num_elements*sizeof(Type));
+	fout.close();
+}
+
 // maximal error bound to keep the sign of u0v1 - u0v2 + u1v2 - u1v0 + u2v0 - u2v1
 template<typename T>
 inline double max_eb_to_keep_sign_det2x2(const T u0, const T u1, const T u2, const T v0, const T v1, const T v2){
@@ -168,7 +175,7 @@ sz_compress_cp_preserve_2d_offline(const T * U, const T * V, size_t r1, size_t r
 
 	size_t num_elements = r1 * r2;
 	double * eb = (double *) malloc(num_elements * sizeof(double));
-	for(int i=0; i<num_elements; i++) eb[i] = 1;
+	for(int i=0; i<num_elements; i++) eb[i] = max_pwr_eb;
 	const T * U_pos = U;
 	const T * V_pos = V;
 	double * eb_pos = eb;
@@ -213,11 +220,13 @@ sz_compress_cp_preserve_2d_offline(const T * U, const T * V, size_t r1, size_t r
 	for(int i=0; i<num_elements; i++){
 		eb_u[i] = fabs(U[i]) * eb[i];
 		*(eb_quant_index_pos ++) = eb_exponential_quantize(eb_u[i], base, log2_of_base, threshold);
+		// *(eb_quant_index_pos ++) = eb_linear_quantize(eb_u[i], 1e-2);
 		if(eb_u[i] < threshold) eb_u[i] = 0;
 	}
 	for(int i=0; i<num_elements; i++){
 		eb_v[i] = fabs(V[i]) * eb[i];
 		*(eb_quant_index_pos ++) = eb_exponential_quantize(eb_v[i], base, log2_of_base, threshold);
+		// *(eb_quant_index_pos ++) = eb_linear_quantize(eb_v[i], 1e-2);
 		if(eb_v[i] < threshold) eb_v[i] = 0;
 	}
 	free(eb);
@@ -266,7 +275,7 @@ sz_compress_cp_preserve_2d_offline_log(const T * U, const T * V, size_t r1, size
 
 	size_t num_elements = r1 * r2;
 	double * eb = (double *) malloc(num_elements * sizeof(double));
-	for(int i=0; i<num_elements; i++) eb[i] = 1;
+	for(int i=0; i<num_elements; i++) eb[i] = max_pwr_eb;
 	const T * U_pos = U;
 	const T * V_pos = V;
 	double * eb_pos = eb;
@@ -275,7 +284,7 @@ sz_compress_cp_preserve_2d_offline_log(const T * U, const T * V, size_t r1, size
 	const T X_lower[3][2] = {{0, 0}, {0, 1}, {1, 1}};
 	const size_t offset_upper[3] = {0, r2, r2+1};
 	const size_t offset_lower[3] = {0, 1, r2+1};
-	printf("compute eb\n");
+	// printf("compute eb\n");
 	for(int i=0; i<r1-1; i++){
 		const T * U_row_pos = U_pos;
 		const T * V_row_pos = V_pos;
@@ -300,7 +309,8 @@ sz_compress_cp_preserve_2d_offline_log(const T * U, const T * V, size_t r1, size
 		V_pos += r2;
 		eb_pos += r2;
 	}
-	printf("compute eb done\n");
+	// writefile("eb_2d_decoupled.dat", eb, num_elements);
+	// printf("compute eb done\n");
 	size_t sign_map_size = (num_elements - 1)/8 + 1;
 	unsigned char * sign_map_compressed = (unsigned char *) malloc(2*sign_map_size);
 	unsigned char * sign_map_compressed_pos = sign_map_compressed;
@@ -320,8 +330,9 @@ sz_compress_cp_preserve_2d_offline_log(const T * U, const T * V, size_t r1, size
 	for(int i=0; i<num_elements; i++){
 		eb[i] = log2(1 + eb[i]);
 		*(eb_quant_index_pos ++) = eb_exponential_quantize(eb[i], base, log2_of_base, threshold);
+		// *(eb_quant_index_pos ++) = eb_linear_quantize(eb[i], 5e-3);
 	}
-	printf("quantize eb done\n");
+	// printf("quantize eb done\n");
 	unsigned char * compressed_eb = (unsigned char *) malloc(num_elements*sizeof(int));
 	unsigned char * compressed_eb_pos = compressed_eb; 
 	Huffman_encode_tree_and_data(2*1024, eb_quant_index, num_elements, compressed_eb_pos);
@@ -332,7 +343,7 @@ sz_compress_cp_preserve_2d_offline_log(const T * U, const T * V, size_t r1, size
 	free(log_U);
 	unsigned char * compressed_v = sz_compress_2d_with_eb(log_V, eb, r1, r2, compressed_v_size);
 	free(log_V);
-	printf("eb_size = %ld, log_u_size = %ld, log_v_size = %ld\n", compressed_eb_size, compressed_u_size, compressed_v_size);
+	// printf("eb_size = %ld, log_u_size = %ld, log_v_size = %ld\n", compressed_eb_size, compressed_u_size, compressed_v_size);
 	free(eb);
 	compressed_size = sizeof(int) + 2*sign_map_size + sizeof(size_t) + sizeof(double) + compressed_eb_size + sizeof(size_t) + compressed_u_size + sizeof(size_t) + compressed_v_size;
 	unsigned char * compressed = (unsigned char *) malloc(compressed_size);
@@ -344,7 +355,7 @@ sz_compress_cp_preserve_2d_offline_log(const T * U, const T * V, size_t r1, size
 	write_variable_to_dst(compressed_pos, compressed_v_size);
 	write_array_to_dst(compressed_pos, compressed_eb, compressed_eb_size);
 	write_array_to_dst(compressed_pos, sign_map_compressed, 2*sign_map_size);
-	printf("before data: %ld\n", compressed_pos - compressed);
+	// printf("before data: %ld\n", compressed_pos - compressed);
 	write_array_to_dst(compressed_pos, compressed_u, compressed_u_size);
 	write_array_to_dst(compressed_pos, compressed_v, compressed_v_size);
 	free(sign_map_compressed);
@@ -378,7 +389,9 @@ typedef struct conditions_2d{
 // maximal error bound to keep the sign of A*(1 + e_1) + B*(1 + e_2) + C
 template<typename T>
 inline double max_eb_to_keep_sign_2d_online(const T A, const T B, const T C=0){
-	return fabs(A + B + C) / (fabs(A) + fabs(B) + fabs(C));
+	double fabs_sum = (fabs(A) + fabs(B));
+	if(fabs_sum == 0) return 0;
+	return fabs(A + B + C) / fabs_sum;
 }
 
 // W0 + W1 = u1v2 - u2v1 + u2v0 - u0v2
@@ -387,9 +400,9 @@ inline double max_eb_to_keep_sign_2d_online(const T A, const T B, const T C=0){
 template<typename T>
 inline double max_eb_to_keep_position_online(const T u0v1, const T u1v0, const T u1v2, const T u2v1, const T u2v0, const T u0v2){
 	double eb = MIN(max_eb_to_keep_sign_2d_online(-u2v1, u1v2), max_eb_to_keep_sign_2d_online(u2v0, -u0v2));
-	eb = MIN(eb, max_eb_to_keep_sign_2d_online(u2v0, -u0v2, u0v1 - u1v0));
-	eb = MIN(eb, max_eb_to_keep_sign_2d_online(-u2v1, u1v2, u0v1 - u1v0));
-	eb = MIN(eb, max_eb_to_keep_sign_2d_online(u2v0 - u2v1, u1v2 - u0v2));
+	// eb = MIN(eb, max_eb_to_keep_sign_2d_online(u2v0, -u0v2, u0v1 - u1v0));
+	// eb = MIN(eb, max_eb_to_keep_sign_2d_online(-u2v1, u1v2, u0v1 - u1v0));
+	// eb = MIN(eb, max_eb_to_keep_sign_2d_online(u2v0 - u2v1, u1v2 - u0v2));
 	return eb;
 }
 
@@ -429,7 +442,8 @@ inline double max_eb_to_keep_type_online(const T u0, const T u1, const T u2, con
 		if(delta == 0) return 0;
 		else if(delta > 0){
 			// (|2AC' - 4D| + |2BC' - 4E|)* -e + delta > 0
-			eb = MIN(eb, delta/(fabs(2*A*C - 4*D) + fabs(2*B*C - 4*E)));
+			if((fabs(2*A*C - 4*D) + fabs(2*B*C - 4*E)) == 0) eb = 1;
+			else eb = MIN(eb, delta/(fabs(2*A*C - 4*D) + fabs(2*B*C - 4*E)));
 			// check four edges
 
 		}
@@ -452,7 +466,8 @@ inline double max_eb_to_keep_type_online(const T u0, const T u1, const T u2, con
 				for(int j=0; j<2; j++){
 					double a = (e1[i] * A + e2[j] * B) * (e1[i] * A + e2[j] * B);
 					double b = (2*A*C - 4*D) * e1[i] + (2*B*C - 4*E) * e2[j];
-					eb = MIN(eb, (-b + sqrt(b*b - 4*a*c))/(2*a));
+					if(a == 0) eb = MIN(eb, 1);
+					else eb = MIN(eb, (-b + sqrt(b*b - 4*a*c))/(2*a));
 				}
 			}
 		}
@@ -615,6 +630,7 @@ sz_compress_cp_preserve_2d_online(const T * U, const T * V, size_t r1, size_t r2
 					T cur_data = *cur_data_pos;
 					double abs_eb = fabs(cur_data) * required_eb;
 					eb_quant_index_pos[k] = eb_exponential_quantize(abs_eb, base, log_of_base, threshold);
+					// eb_quant_index_pos[k] = eb_linear_quantize(abs_eb, 1e-3);
 					if(eb_quant_index_pos[k] > 0){
 						// get adjacent data and perform Lorenzo
 						/*
@@ -787,6 +803,9 @@ sz_compress_cp_preserve_2d_online_log(const T * U, const T * V, size_t r1, size_
 	// for(int i=0; i<2*num_elements; i++) conds[i].computed = false;
 	// int * count = (int *) malloc(2*num_elements*sizeof(int));
 	// memset(count, 0, 2*num_elements*sizeof(int));
+	// double * eb = (double *) malloc(num_elements*sizeof(double));
+	// for(int i=0; i<num_elements; i++) eb[i] = 1;
+	// int index_eb = 0;
 	T * cur_log_U_pos = log_U;
 	T * cur_log_V_pos = log_V;
 	T * cur_U_pos = decompressed_U;
@@ -813,11 +832,13 @@ sz_compress_cp_preserve_2d_online_log(const T * U, const T * V, size_t r1, size_
 						cur_V_pos[offsets[k]], cur_V_pos[offsets[k+1]], cur_V_pos[0], inv_C[k]));
 				}
 			}
+			// eb[index_eb++] = required_eb;
 			if((required_eb > 0) && (*cur_U_pos != 0) && (*cur_V_pos != 0)){
 				bool unpred_flag = false;
 				T decompressed[2];
 				double abs_eb = log2(1 + required_eb);
 				*eb_quant_index_pos = eb_exponential_quantize(abs_eb, base, log_of_base);
+				// *eb_quant_index_pos = eb_linear_quantize(abs_eb, 1e-2);
 				if(*eb_quant_index_pos > 0){
 					// compress U and V
 					for(int k=0; k<2; k++){
@@ -882,23 +903,14 @@ sz_compress_cp_preserve_2d_online_log(const T * U, const T * V, size_t r1, size_
 			cur_U_pos ++, cur_V_pos ++;
 		}
 	}
-	// int zero = 0;
-	// for(int i=0; i<2*num_elements; i++){
-	// 	if(count[i]){
-	// 		if(count[i] != 3){
-	// 			printf("i = %d, count[i] = %d\n", i, count[i]);
-	// 			exit(0);
-	// 		}
-	// 	}
-	// 	else zero ++;
-	// }
-	// printf("zero = %d, nonzero = %d\n", zero, 2*num_elements - zero);
-	// free(conds);
+	// printf("%d %d\n", index_eb, num_elements);
+	// writefile("eb_2d.dat", eb, num_elements);
+	// free(eb);
 	free(log_U);
 	free(log_V);
 	free(decompressed_U);
 	free(decompressed_V);
-	printf("offsets eb_q, data_q, unpred: %ld %ld %ld\n", eb_quant_index_pos - eb_quant_index, data_quant_index_pos - data_quant_index, unpred_data.size());
+	// printf("offsets eb_q, data_q, unpred: %ld %ld %ld\n", eb_quant_index_pos - eb_quant_index, data_quant_index_pos - data_quant_index, unpred_data.size());
 	unsigned char * compressed = (unsigned char *) malloc(2*num_elements*sizeof(T));
 	unsigned char * compressed_pos = compressed;
 	write_variable_to_dst(compressed_pos, base);

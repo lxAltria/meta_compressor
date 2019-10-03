@@ -59,6 +59,31 @@ inline double max_eb_to_keep_sign(const T positive, const T negative, int degree
   return fabs(P - N)/(P + N);
 }
 
+/* ----------------------------- acbrt1 ----------------------------- */
+
+/* This is acbrt with an additional step of the Newton iteration, for
+increased accuracy.
+   The relative error ranges from 0 to +0.00000116. */
+
+inline float acbrt1(float x0) {
+   union {int ix; float x;};
+
+   x = x0;                      // x can be viewed as int.
+   ix = ix/4 + ix/16;           // Approximate divide by 3.
+   ix = ix + ix/16;
+   ix = ix + ix/256;
+   ix = 0x2a5137a0 + ix;        // Initial guess.
+   x = 0.33333333f*(2.0f*x + x0/(x*x));  // Newton step.
+   x = 0.33333333f*(2.0f*x + x0/(x*x));  // Newton step again.
+   return x;
+}
+
+inline float max_eb_to_keep_sign_3d_offline(const float positive, const float negative){
+	float P = acbrt1(positive);
+	float N = acbrt1(negative);
+	return fabs(P - N)/(P + N);
+}
+
 template<typename T>
 inline void accumulate(const T value, double& positive, double& negative){
 	if(value >= 0) positive += value;

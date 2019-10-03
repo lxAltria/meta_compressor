@@ -40,149 +40,67 @@ max_eb_to_keep_position_and_type_3d_offline(const T u0, const T u1, const T u2, 
 		return 0;
 	}
 	else{
-		double eb = 0;
-		if(!flag[0]){
-			double positive = 0;
-			double negative = 0;
+		float eb = 0;
+		double positive_m0 = 0, negative_m0 = 0;
+		{
 			// M0
-			accumulate(- u3v1w2, positive, negative);
-			accumulate(u3v2w1, positive, negative);
-			accumulate(u1v3w2, positive, negative);
-			accumulate(- u2v3w1, positive, negative);
-			accumulate(- u1v2w3, positive, negative);
-			accumulate(u2v1w3, positive, negative);
-			double eb1 = max_eb_to_keep_sign(positive, negative, 3);
-			positive = 0, negative = 0;
+			accumulate(- u3v1w2, positive_m0, negative_m0);
+			accumulate(u3v2w1, positive_m0, negative_m0);
+			accumulate(u1v3w2, positive_m0, negative_m0);
+			accumulate(- u2v3w1, positive_m0, negative_m0);
+			accumulate(- u1v2w3, positive_m0, negative_m0);
+			accumulate(u2v1w3, positive_m0, negative_m0);
+		}
+		double positive_m1 = 0, negative_m1 = 0;
+		{
 			// M1
-			accumulate(- u3v2w0, positive, negative);
-			accumulate(u3v0w2, positive, negative);
-			accumulate(u2v3w0, positive, negative);
-			accumulate(- u0v3w2, positive, negative);
-			accumulate(u0v2w3, positive, negative);
-			accumulate(- u2v0w3, positive, negative);
+			accumulate(- u3v2w0, positive_m1, negative_m1);
+			accumulate(u3v0w2, positive_m1, negative_m1);
+			accumulate(u2v3w0, positive_m1, negative_m1);
+			accumulate(- u0v3w2, positive_m1, negative_m1);
+			accumulate(u0v2w3, positive_m1, negative_m1);
+			accumulate(- u2v0w3, positive_m1, negative_m1);
+		}
+		double positive_m2 = 0, negative_m2 = 0;
+		{
 			// M2
-			accumulate(- u3v0w1, positive, negative);
-			accumulate(u3v1w0, positive, negative);
-			accumulate(u0v3w1, positive, negative);
-			accumulate(- u1v3w0, positive, negative);
-			accumulate(- u0v1w3, positive, negative);
-			accumulate(u1v0w3, positive, negative);
+			accumulate(- u3v0w1, positive_m2, negative_m2);
+			accumulate(u3v1w0, positive_m2, negative_m2);
+			accumulate(u0v3w1, positive_m2, negative_m2);
+			accumulate(- u1v3w0, positive_m2, negative_m2);
+			accumulate(- u0v1w3, positive_m2, negative_m2);
+			accumulate(u1v0w3, positive_m2, negative_m2);			
+		}
+		double positive_m3 = 0, negative_m3 = 0;
+		{
 			// M3
-			accumulate(u0v1w2, positive, negative);
-			accumulate(- u0v2w1, positive, negative);
-			accumulate(u1v2w0, positive, negative);
-			accumulate(- u1v0w2, positive, negative);
-			accumulate(u2v0w1, positive, negative);
-			accumulate(- u2v1w0, positive, negative);
-			double eb2 = max_eb_to_keep_sign(positive, negative, 3);
+			accumulate(u0v1w2, positive_m3, negative_m3);
+			accumulate(- u0v2w1, positive_m3, negative_m3);
+			accumulate(u1v2w0, positive_m3, negative_m3);
+			accumulate(- u1v0w2, positive_m3, negative_m3);
+			accumulate(u2v0w1, positive_m3, negative_m3);
+			accumulate(- u2v1w0, positive_m3, negative_m3);
+		}
+		float p_m0 = positive_m0, p_m1 = positive_m1, p_m2 = positive_m2, p_m3 = positive_m3;
+		float n_m0 = negative_m0, n_m1 = negative_m1, n_m2 = negative_m2, n_m3 = negative_m3;
+		if(!flag[0]){
+			float eb1 = max_eb_to_keep_sign_3d_offline(p_m0, n_m0);
+			float eb2 = max_eb_to_keep_sign_3d_offline(p_m1 + p_m2 + p_m3, n_m1 + n_m2 + n_m3);
 			eb = MAX(eb, MIN(eb1, eb2));
 		}
 		if(!flag[1]){
-			double positive = 0;
-			double negative = 0;
-			// M1
-			accumulate(- u3v2w0, positive, negative);
-			accumulate(u3v0w2, positive, negative);
-			accumulate(u2v3w0, positive, negative);
-			accumulate(- u0v3w2, positive, negative);
-			accumulate(u0v2w3, positive, negative);
-			accumulate(- u2v0w3, positive, negative);
-			double eb1 = max_eb_to_keep_sign(positive, negative, 3);
-			positive = 0, negative = 0;
-			// M0
-			accumulate(- u3v1w2, positive, negative);
-			accumulate(u3v2w1, positive, negative);
-			accumulate(u1v3w2, positive, negative);
-			accumulate(- u2v3w1, positive, negative);
-			accumulate(- u1v2w3, positive, negative);
-			accumulate(u2v1w3, positive, negative);
-			// M2
-			accumulate(- u3v0w1, positive, negative);
-			accumulate(u3v1w0, positive, negative);
-			accumulate(u0v3w1, positive, negative);
-			accumulate(- u1v3w0, positive, negative);
-			accumulate(- u0v1w3, positive, negative);
-			accumulate(u1v0w3, positive, negative);
-			// M3
-			accumulate(u0v1w2, positive, negative);
-			accumulate(- u0v2w1, positive, negative);
-			accumulate(u1v2w0, positive, negative);
-			accumulate(- u1v0w2, positive, negative);
-			accumulate(u2v0w1, positive, negative);
-			accumulate(- u2v1w0, positive, negative);
-			double eb2 = max_eb_to_keep_sign(positive, negative, 3);
+			float eb1 = max_eb_to_keep_sign_3d_offline(p_m1, n_m1);
+			float eb2 = max_eb_to_keep_sign_3d_offline(p_m0 + p_m2 + p_m3, n_m0 + n_m2 + n_m3);
 			eb = MAX(eb, MIN(eb1, eb2));
 		}
 		if(!flag[2]){
-			double positive = 0;
-			double negative = 0;
-			// M2
-			accumulate(- u3v0w1, positive, negative);
-			accumulate(u3v1w0, positive, negative);
-			accumulate(u0v3w1, positive, negative);
-			accumulate(- u1v3w0, positive, negative);
-			accumulate(- u0v1w3, positive, negative);
-			accumulate(u1v0w3, positive, negative);
-			double eb1 = max_eb_to_keep_sign(positive, negative, 3);
-			positive = 0, negative = 0;
-			// M0
-			accumulate(- u3v1w2, positive, negative);
-			accumulate(u3v2w1, positive, negative);
-			accumulate(u1v3w2, positive, negative);
-			accumulate(- u2v3w1, positive, negative);
-			accumulate(- u1v2w3, positive, negative);
-			accumulate(u2v1w3, positive, negative);
-			// M1
-			accumulate(- u3v2w0, positive, negative);
-			accumulate(u3v0w2, positive, negative);
-			accumulate(u2v3w0, positive, negative);
-			accumulate(- u0v3w2, positive, negative);
-			accumulate(u0v2w3, positive, negative);
-			accumulate(- u2v0w3, positive, negative);
-			// M3
-			accumulate(u0v1w2, positive, negative);
-			accumulate(- u0v2w1, positive, negative);
-			accumulate(u1v2w0, positive, negative);
-			accumulate(- u1v0w2, positive, negative);
-			accumulate(u2v0w1, positive, negative);
-			accumulate(- u2v1w0, positive, negative);
-			double eb2 = max_eb_to_keep_sign(positive, negative, 3);
+			float eb1 = max_eb_to_keep_sign_3d_offline(p_m2, n_m2);
+			float eb2 = max_eb_to_keep_sign_3d_offline(p_m0 + p_m1 + p_m3, n_m0 + n_m1 + n_m3);
 			eb = MAX(eb, MIN(eb1, eb2));
 		}
 		if(!flag[3]){
-			double positive = 0;
-			double negative = 0;
-			// M3
-			accumulate(u0v1w2, positive, negative);
-			accumulate(- u0v2w1, positive, negative);
-			accumulate(u1v2w0, positive, negative);
-			accumulate(- u1v0w2, positive, negative);
-			accumulate(u2v0w1, positive, negative);
-			accumulate(- u2v1w0, positive, negative);
-			double eb1 = max_eb_to_keep_sign(positive, negative, 3);
-			positive = 0, negative = 0;
-			// M0
-			accumulate(- u3v1w2, positive, negative);
-			accumulate(u3v2w1, positive, negative);
-			accumulate(u1v3w2, positive, negative);
-			accumulate(- u2v3w1, positive, negative);
-			accumulate(- u1v2w3, positive, negative);
-			accumulate(u2v1w3, positive, negative);
-			// M1
-			accumulate(- u3v2w0, positive, negative);
-			accumulate(u3v0w2, positive, negative);
-			accumulate(u2v3w0, positive, negative);
-			accumulate(- u0v3w2, positive, negative);
-			accumulate(u0v2w3, positive, negative);
-			accumulate(- u2v0w3, positive, negative);
-			// M2
-			accumulate(- u3v0w1, positive, negative);
-			accumulate(u3v1w0, positive, negative);
-			accumulate(u0v3w1, positive, negative);
-			accumulate(- u1v3w0, positive, negative);
-			accumulate(- u0v1w3, positive, negative);
-			accumulate(u1v0w3, positive, negative);
-			double eb2 = max_eb_to_keep_sign(positive, negative, 3);
+			float eb1 = max_eb_to_keep_sign_3d_offline(p_m3, n_m3);
+			float eb2 = max_eb_to_keep_sign_3d_offline(p_m0 + p_m1 + p_m2, n_m0 + n_m1 + n_m2);
 			eb = MAX(eb, MIN(eb1, eb2));
 		}
 		return eb;

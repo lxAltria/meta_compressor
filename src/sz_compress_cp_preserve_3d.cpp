@@ -37,6 +37,7 @@ max_eb_to_keep_position_and_type_3d_offline(const T u0, const T u1, const T u2, 
 	flag[3] = (M3 == 0) || (M / M3 > 1);
 	if(flag[0] && flag[1] && flag[2] && flag[3]){
 		// cp found
+		if(same_direction(u0, u1, u2, u3) || same_direction(v0, v1, v2, v3) || same_direction(w0, w1, w2, w3)) return 1;
 		return 0;
 	}
 	else{
@@ -452,16 +453,6 @@ inline double max_eb_to_keep_sign_3d_online(const T A, const T B, const T C, con
 // 	S = u2 v1 w0 - u1 v2 w0 - u2 v0 w1 + u0 v2 w1 + u1 v0 w2 - u0 v1 w2
 
 // }
-template <typename T> int sgn(T val) {
-    return (T(0) < val) - (val < T(0));
-}
-
-template <typename T> bool same_direction(T u0, T u1, T u2, T u3) {
-    int sgn0 = sgn(u0);
-    if(sgn0 == 0) return false;
-    if((sgn0 == sgn(u1)) && (sgn0 == sgn(u2)) && (sgn0 == sgn(u3))) return true;
-    return false;
-}
 
 template<typename T>
 double 
@@ -505,7 +496,6 @@ max_eb_to_keep_position_and_type_3d_online(const T u0, const T u1, const T u2, c
 	double M3 = c_4;
 	double M = M0 + M1 + M2 + M3;
 	if(M == 0){
-		int sgn0 = sgn(M0);
 		if(same_direction(u0, u1, u2, u3) || same_direction(v0, v1, v2, v3) || same_direction(w0, w1, w2, w3)) return 1;
 		return 0;
 	}

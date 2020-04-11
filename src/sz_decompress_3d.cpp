@@ -290,5 +290,8 @@ template
 float * 
 sz_decompress_3d<float>(const unsigned char * compressed, size_t r1, size_t r2, size_t r3);
 
+template
+double * 
+sz_decompress_3d<double>(const unsigned char * compressed, size_t r1, size_t r2, size_t r3);
 
 

@@ -439,6 +439,10 @@ template
 unsigned char * 
 sz_compress_3d<float>(const float * data, size_t r1, size_t r2, size_t r3, double precision, size_t& compressed_size, int BSIZE, bool block_independant);
 
+template 
+unsigned char * 
+sz_compress_3d<double>(const double * data, size_t r1, size_t r2, size_t r3, double precision, size_t& compressed_size, int BSIZE, bool block_independant);
+
 template<typename T>
 size_t
 prediction_and_quantization_3d_with_border_prediction_with_eb(const T * data, const double * precisions, const DSize_3d& size, const meanInfo<T>& mean_info,

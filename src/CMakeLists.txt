@@ -11,9 +11,8 @@ add_library (sz_cpp SHARED
 	sz_decompress_pwr.cpp
 	sz_huffman.cpp
 	sz_lossless.cpp)
-target_include_directories(sz_cpp PRIVATE ${ZSTD_INCLUDES})
 target_include_directories(sz_cpp PRIVATE ${PROJECT_SOURCE_DIR}/include)
-target_link_libraries(sz_cpp ${ZSTD_LIBS})
+target_link_libraries(sz_cpp PRIVATE PkgConfig::ZSTD)
 file(GLOB header_files ${PROJECT_SOURCE_DIR}/include/*.hpp)
 
 install(FILES ${header_files} DESTINATION ${PROJECT_BINARY_DIR}/include)
